@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::io::{self, Write};
@@ -14,9 +15,6 @@ fn main() {
 
     match command.as_str() {
         "tokenize" => {
-            // You can use print statements as follows for debugging, they'll be visible when running tests.
-            writeln!(io::stderr(), "Logs from your program will appear here!").unwrap();
-
             let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
                 writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
                 String::new()
@@ -25,7 +23,11 @@ fn main() {
 
             if !file_contents.is_empty() {
                 writeln!(io::stderr(), "Read file with content: {}", file_contents).unwrap();
-                tokenize(&file_contents)
+                let result = tokenize(&file_contents);
+                match result {
+                    Ok(_) => writeln!(io::stderr(), "Tokenization successful").unwrap(),
+                    Err(e) => writeln!(io::stderr(), "Error during tokenization: {}", e).unwrap(),
+                }
             } else {
                 println!("EOF  null"); // Placeholder, remove this line when implementing the scanner
             }
@@ -37,14 +39,21 @@ fn main() {
     }
 }
 
-fn tokenize(input: &str) {
-    for c in input.chars(){
-        if c=='(' {
-            writeln!(io::stdout(), "LEFT_PAREN ( null").unwrap()
-        }
-        if c == ')' {
-            writeln!(io::stdout(), "RIGHT_PAREN ) null").unwrap()
+fn tokenize(input: &str) -> io::Result<()> {
+    let mut token_map = HashMap::new();
+    token_map.insert('(', "LEFT_PAREN ( null");
+    token_map.insert(')', "RIGHT_PAREN ) null");
+
+    let stdout = io::stdout();
+    let mut handle = stdout.lock();
+    let mut buffer = String::new();
+
+    for c in input.chars() {
+        if let Some(token) = token_map.get(&c) {
+            buffer.push_str(token);
+            buffer.push('\n');
         }
     }
-    writeln!(io::stdout(), "EOF  null").unwrap()
+    buffer.push_str("EOF  null\n");
+    handle.write_all(buffer.as_bytes())
 }
