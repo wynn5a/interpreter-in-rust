@@ -24,7 +24,8 @@ fn main() {
 
 
             if !file_contents.is_empty() {
-                panic!("Scanner not implemented");
+                writeln!(io::stderr(), "Read file with content: {}", file_contents).unwrap();
+                tokenize(&file_contents)
             } else {
                 println!("EOF  null"); // Placeholder, remove this line when implementing the scanner
             }
@@ -34,4 +35,16 @@ fn main() {
             return;
         }
     }
+}
+
+fn tokenize(input: &String) {
+    for c in input.chars(){
+        if c=='(' {
+            writeln!(io::stdout(), "LEFT_PAREN ( null").unwrap()
+        }
+        if c == ')' {
+            writeln!(io::stdout(), "RIGHT_PAREN ) null").unwrap()
+        }
+    }
+    writeln!(io::stdout(), "EOF  null").unwrap()
 }
