@@ -2,11 +2,11 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 
-use crate::token::Token;
-use crate::token_types::TokenType;
+use crate::lox::Lox;
 
 mod token_types;
 mod token;
+mod lox;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -28,10 +28,7 @@ fn main() {
 
             if !file_contents.is_empty() {
                 writeln!(io::stderr(), "Read file with content: {}", file_contents).unwrap();
-                let result = tokenize(&file_contents);
-                for token in result {
-                    writeln!(io::stdout(), "{}", token).unwrap();
-                }
+                Lox::default().tokenize(&file_contents);
             } else {
                 println!("EOF  null"); // Placeholder, remove this line when implementing the scanner
             }
@@ -41,64 +38,4 @@ fn main() {
             return;
         }
     }
-}
-
-fn tokenize(input: &str) -> Vec<Token> {
-    let mut tokens: Vec<Token> = Vec::new();
-
-    for c in input.chars() {
-        match c {
-            '(' => {
-                let t = Token::new(TokenType::LeftParen, "(".to_string(), None, 1);
-                tokens.push(t);
-            }
-            ')' => {
-                let t = Token::new(TokenType::RightParen, ")".to_string(), None, 1);
-                tokens.push(t);
-            }
-            '{' => {
-                let t = Token::new(TokenType::LeftBrace, "{".to_string(), None, 1);
-                tokens.push(t);
-            }
-            '}' => {
-                let t = Token::new(TokenType::RightBrace, "}".to_string(), None, 1);
-                tokens.push(t);
-            }
-            ',' => {
-                let t = Token::new(TokenType::Comma, ",".to_string(), None, 1);
-                tokens.push(t);
-            }
-            '.' => {
-                let t = Token::new(TokenType::Dot, ".".to_string(), None, 1);
-                tokens.push(t);
-            }
-            '-' => {
-                let t = Token::new(TokenType::Minus, "-".to_string(), None, 1);
-                tokens.push(t);
-            }
-            '+' => {
-                let t = Token::new(TokenType::Plus, "+".to_string(), None, 1);
-                tokens.push(t);
-            }
-            ';' => {
-                let t = Token::new(TokenType::Semicolon, ";".to_string(), None, 1);
-                tokens.push(t);
-            }
-            '*' => {
-                let t = Token::new(TokenType::Star, "*".to_string(), None, 1);
-                tokens.push(t);
-            }
-            '!' => {
-                let t = Token::new(TokenType::Bang, "!".to_string(), None, 1);
-                tokens.push(t);
-            }
-            '=' => {
-                let t = Token::new(TokenType::Equal, "=".to_string(), None, 1);
-                tokens.push(t);
-            }
-            _ => {}
-        }
-    }
-    tokens.push(Token::new(TokenType::Eof, "".to_string(), None, 1));
-    tokens
 }
