@@ -1,7 +1,12 @@
-use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::io::{self, Write};
+
+use crate::token::Token;
+use crate::token_types::TokenType;
+
+mod token_types;
+mod token;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -24,9 +29,8 @@ fn main() {
             if !file_contents.is_empty() {
                 writeln!(io::stderr(), "Read file with content: {}", file_contents).unwrap();
                 let result = tokenize(&file_contents);
-                match result {
-                    Ok(_) => writeln!(io::stderr(), "Tokenization successful").unwrap(),
-                    Err(e) => writeln!(io::stderr(), "Error during tokenization: {}", e).unwrap(),
+                for token in result {
+                    writeln!(io::stdout(), "{}", token).unwrap();
                 }
             } else {
                 println!("EOF  null"); // Placeholder, remove this line when implementing the scanner
@@ -39,23 +43,62 @@ fn main() {
     }
 }
 
-fn tokenize(input: &str) -> io::Result<()> {
-    let mut token_map = HashMap::new();
-    token_map.insert('(', "LEFT_PAREN ( null");
-    token_map.insert(')', "RIGHT_PAREN ) null");
-    token_map.insert('{', "LEFT_BRACE { null");
-    token_map.insert('}', "RIGHT_BRACE } null");
-
-    let stdout = io::stdout();
-    let mut handle = stdout.lock();
-    let mut buffer = String::new();
+fn tokenize(input: &str) -> Vec<Token> {
+    let mut tokens: Vec<Token> = Vec::new();
 
     for c in input.chars() {
-        if let Some(token) = token_map.get(&c) {
-            buffer.push_str(token);
-            buffer.push('\n');
+        match c {
+            '(' => {
+                let t = Token::new(TokenType::LeftParen, "(".to_string(), None, 1);
+                tokens.push(t);
+            }
+            ')' => {
+                let t = Token::new(TokenType::RightParen, ")".to_string(), None, 1);
+                tokens.push(t);
+            }
+            '{' => {
+                let t = Token::new(TokenType::LeftBrace, "{".to_string(), None, 1);
+                tokens.push(t);
+            }
+            '}' => {
+                let t = Token::new(TokenType::RightBrace, "}".to_string(), None, 1);
+                tokens.push(t);
+            }
+            ',' => {
+                let t = Token::new(TokenType::Comma, ",".to_string(), None, 1);
+                tokens.push(t);
+            }
+            '.' => {
+                let t = Token::new(TokenType::Dot, ".".to_string(), None, 1);
+                tokens.push(t);
+            }
+            '-' => {
+                let t = Token::new(TokenType::Minus, "-".to_string(), None, 1);
+                tokens.push(t);
+            }
+            '+' => {
+                let t = Token::new(TokenType::Plus, "+".to_string(), None, 1);
+                tokens.push(t);
+            }
+            ';' => {
+                let t = Token::new(TokenType::Semicolon, ";".to_string(), None, 1);
+                tokens.push(t);
+            }
+            '*' => {
+                let t = Token::new(TokenType::Star, "*".to_string(), None, 1);
+                tokens.push(t);
+            }
+            '!' => {
+                let t = Token::new(TokenType::Bang, "!".to_string(), None, 1);
+                tokens.push(t);
+            }
+            '=' => {
+                let t = Token::new(TokenType::Equal, "=".to_string(), None, 1);
+                tokens.push(t);
+            }
+            _ => {}
         }
     }
-    buffer.push_str("EOF  null\n");
-    handle.write_all(buffer.as_bytes())
+    tokens.push(Token::new(TokenType::Eof, "".to_string(), None, 1));
+    tokens
 }
