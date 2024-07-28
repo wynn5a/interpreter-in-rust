@@ -37,7 +37,7 @@ fn main() {
     }
 }
 
-fn tokenize(input: &String) {
+fn tokenize(input: &str) {
     for c in input.chars(){
         if c=='(' {
             writeln!(io::stdout(), "LEFT_PAREN ( null").unwrap()
