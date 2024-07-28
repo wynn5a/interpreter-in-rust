@@ -43,6 +43,8 @@ fn tokenize(input: &str) -> io::Result<()> {
     let mut token_map = HashMap::new();
     token_map.insert('(', "LEFT_PAREN ( null");
     token_map.insert(')', "RIGHT_PAREN ) null");
+    token_map.insert('{', "LEFT_BRACE { null");
+    token_map.insert('}', "RIGHT_BRACE } null");
 
     let stdout = io::stdout();
     let mut handle = stdout.lock();
