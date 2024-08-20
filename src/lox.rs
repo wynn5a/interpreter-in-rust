@@ -111,18 +111,46 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
             }
             '"' => {
                 let mut start = current + 1;
-                while current < len-1 && input.chars().nth(current + 1).unwrap() != '"' {
+                while current < len - 1 && input.chars().nth(current + 1).unwrap() != '"' {
                     current += 1;
+                    if input.chars().nth(current).unwrap() == '\n' {
+                        line += 1;
+                    }
                 }
 
-                if current == len-1 || input.chars().nth(current + 1).unwrap() != '"' {
+                if current == len - 1 || input.chars().nth(current + 1).unwrap() != '"' {
                     writeln!(io::stderr(), "[line {}] Error: Unterminated string.", line).unwrap();
                     lox.had_error = true;
                 } else {
-                    let value = input[start..current+1].to_string();
+                    let value = input[start..current + 1].to_string();
                     tokens.push(Token::new(TokenType::String, format!("\"{}\"", value), Some(value), line));
                     current += 1;
                 }
+            }
+            '0'..='9' => {
+                let mut start = current;
+                while current < len && input.chars().nth(current).unwrap().is_numeric() {
+                    current += 1;
+                }
+                if current < len && input.chars().nth(current).unwrap() == '.' {
+                    current += 1;
+                    while current < len && input.chars().nth(current).unwrap().is_numeric() {
+                        current += 1;
+                    }
+                }
+                let mut value = input[start..current].to_string();
+                let mut literal = value.clone();
+                if value.ends_with(".") {
+                    literal.push('0');
+                    value.remove(value.len() - 1);
+                    current -= 1;
+                }else if !value.contains(".") {
+                    literal.push('.');
+                    literal.push('0');
+                }
+
+                tokens.push(Token::new(TokenType::Number, value, Some(literal), line));
+                current -= 1;
             }
             _ => {
                 writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", line, c).unwrap();
@@ -322,5 +350,21 @@ mod tests {
         ];
         assert_eq!(result, expected);
         assert_eq!(lox.had_error, true);
+    }
+
+    #[test]
+    fn test_number() {
+        let mut lox = Lox::default();
+        let input = "123.456.123.";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::Number, "123.456".to_string(), Some(String::from("123.456")), 1),
+            Token::new(TokenType::Dot, ".".to_string(), None, 1),
+            Token::new(TokenType::Number, "123".to_string(), Some(String::from("123.0")), 1),
+            Token::new(TokenType::Dot, ".".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, false);
     }
 }
