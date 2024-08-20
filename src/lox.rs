@@ -109,6 +109,21 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
             ' ' | '\r' | '\t' => {
                 // Ignore whitespace
             }
+            '"' => {
+                let mut start = current + 1;
+                while current < len-1 && input.chars().nth(current + 1).unwrap() != '"' {
+                    current += 1;
+                }
+
+                if current == len-1 || input.chars().nth(current + 1).unwrap() != '"' {
+                    writeln!(io::stderr(), "[line {}] Error: Unterminated string.", line).unwrap();
+                    lox.had_error = true;
+                } else {
+                    let value = input[start..current+1].to_string();
+                    tokens.push(Token::new(TokenType::String, format!("\"{}\"", value), Some(value), line));
+                    current += 1;
+                }
+            }
             _ => {
                 writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", line, c).unwrap();
                 lox.had_error = true;
@@ -282,5 +297,30 @@ mod tests {
         ];
         assert_eq!(result, expected);
         assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_string() {
+        let mut lox = Lox::default();
+        let input = "\"Hello, World!\"";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::String, "\"Hello, World!\"".to_string(), Some(String::from("Hello, World!")), 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_unterminated_string() {
+        let mut lox = Lox::default();
+        let input = "\"Hello, World!";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, true);
     }
 }
