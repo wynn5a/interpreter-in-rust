@@ -62,16 +62,15 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
                 tokens.push(Token::new(TokenType::Star, "*".to_string(), None, line));
             }
             '!' => {
-                if current < len -1 && input.chars().nth(current + 1).unwrap() == '=' {
+                if current < len - 1 && input.chars().nth(current + 1).unwrap() == '=' {
                     current += 1;
                     tokens.push(Token::new(TokenType::BangEqual, "!=".to_string(), None, line));
                 } else {
                     tokens.push(Token::new(TokenType::Bang, "!".to_string(), None, line));
                 };
-
             }
             '=' => {
-                if current < len -1 && input.chars().nth(current + 1).unwrap() == '=' {
+                if current < len - 1 && input.chars().nth(current + 1).unwrap() == '=' {
                     current += 1;
                     tokens.push(Token::new(TokenType::EqualEqual, "==".to_string(), None, line));
                 } else {
@@ -79,7 +78,7 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
                 };
             }
             '<' => {
-                if current < len -1 && input.chars().nth(current + 1).unwrap() == '=' {
+                if current < len - 1 && input.chars().nth(current + 1).unwrap() == '=' {
                     current += 1;
                     tokens.push(Token::new(TokenType::LessEqual, "<=".to_string(), None, line));
                 } else {
@@ -87,7 +86,7 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
                 };
             }
             '>' => {
-                if current < len -1 && input.chars().nth(current + 1).unwrap() == '=' {
+                if current < len - 1 && input.chars().nth(current + 1).unwrap() == '=' {
                     current += 1;
                     tokens.push(Token::new(TokenType::GreaterEqual, ">=".to_string(), None, line));
                 } else {
@@ -95,8 +94,8 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
                 };
             }
             '/' => {
-                if current < len -1 && input.chars().nth(current + 1).unwrap() == '/' {
-                    current+=1;
+                if current < len - 1 && input.chars().nth(current + 1).unwrap() == '/' {
+                    current += 1;
                     while current < len && input.chars().nth(current).unwrap() != '\n' {
                         current += 1;
                     }
@@ -106,6 +105,9 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
                 } else {
                     tokens.push(Token::new(TokenType::Slash, "/".to_string(), None, line));
                 }
+            }
+            ' ' | '\r' | '\t' => {
+                // Ignore whitespace
             }
             _ => {
                 writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", line, c).unwrap();
@@ -177,7 +179,7 @@ mod tests {
     }
 
     #[test]
-    fn test_equal(){
+    fn test_equal() {
         let mut lox = Lox::default();
         let input = "=";
         let result = tokenize(&mut lox, input);
@@ -210,7 +212,7 @@ mod tests {
     }
 
     #[test]
-    fn test_less_and_less_equal(){
+    fn test_less_and_less_equal() {
         let mut lox = Lox::default();
         let input = "<<=<==";
         let result = tokenize(&mut lox, input);
@@ -227,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn test_greater_and_greater_equal(){
+    fn test_greater_and_greater_equal() {
         let mut lox = Lox::default();
         let input = ">>=>==";
         let result = tokenize(&mut lox, input);
@@ -244,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn test_slash(){
+    fn test_slash() {
         let mut lox = Lox::default();
         let input = "/";
         let result = tokenize(&mut lox, input);
@@ -257,12 +259,26 @@ mod tests {
     }
 
     #[test]
-    fn test_comment(){
+    fn test_comment() {
         let mut lox = Lox::default();
         let input = "// comment \n///£§᯽☺♣";
         let result = tokenize(&mut lox, input);
         let expected = vec![
             Token::new(TokenType::Eof, "".to_string(), None, 2),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_whitespace() {
+        let mut lox = Lox::default();
+        let input = "{ }";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::LeftBrace, "{".to_string(), None, 1),
+            Token::new(TokenType::RightBrace, "}".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
         ];
         assert_eq!(result, expected);
         assert_eq!(lox.had_error, false);
