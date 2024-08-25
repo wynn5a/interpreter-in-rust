@@ -33,36 +33,16 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
                 line += 1;
             }
             '(' => {
-                tokens.push(Token::new(
-                    TokenType::LeftParen,
-                    "(".to_string(),
-                    None,
-                    line,
-                ));
+                tokens.push(Token::new(TokenType::LeftParen, "(".to_string(), None, line));
             }
             ')' => {
-                tokens.push(Token::new(
-                    TokenType::RightParen,
-                    ")".to_string(),
-                    None,
-                    line,
-                ));
+                tokens.push(Token::new(TokenType::RightParen, ")".to_string(), None, line));
             }
             '{' => {
-                tokens.push(Token::new(
-                    TokenType::LeftBrace,
-                    "{".to_string(),
-                    None,
-                    line,
-                ));
+                tokens.push(Token::new(TokenType::LeftBrace, "{".to_string(), None, line));
             }
             '}' => {
-                tokens.push(Token::new(
-                    TokenType::RightBrace,
-                    "}".to_string(),
-                    None,
-                    line,
-                ));
+                tokens.push(Token::new(TokenType::RightBrace, "}".to_string(), None, line));
             }
             ',' => {
                 tokens.push(Token::new(TokenType::Comma, ",".to_string(), None, line));
@@ -77,12 +57,7 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
                 tokens.push(Token::new(TokenType::Plus, "+".to_string(), None, line));
             }
             ';' => {
-                tokens.push(Token::new(
-                    TokenType::Semicolon,
-                    ";".to_string(),
-                    None,
-                    line,
-                ));
+                tokens.push(Token::new(TokenType::Semicolon, ";".to_string(), None, line));
             }
             '*' => {
                 tokens.push(Token::new(TokenType::Star, "*".to_string(), None, line));
@@ -90,12 +65,7 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
             '!' => {
                 if current < len - 1 && input.chars().nth(current + 1).unwrap() == '=' {
                     current += 1;
-                    tokens.push(Token::new(
-                        TokenType::BangEqual,
-                        "!=".to_string(),
-                        None,
-                        line,
-                    ));
+                    tokens.push(Token::new(TokenType::BangEqual, "!=".to_string(), None, line));
                 } else {
                     tokens.push(Token::new(TokenType::Bang, "!".to_string(), None, line));
                 };
@@ -116,12 +86,7 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
             '<' => {
                 if current < len - 1 && input.chars().nth(current + 1).unwrap() == '=' {
                     current += 1;
-                    tokens.push(Token::new(
-                        TokenType::LessEqual,
-                        "<=".to_string(),
-                        None,
-                        line,
-                    ));
+                    tokens.push(Token::new(TokenType::LessEqual, "<=".to_string(), None, line));
                 } else {
                     tokens.push(Token::new(TokenType::Less, "<".to_string(), None, line));
                 };
@@ -129,12 +94,7 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
             '>' => {
                 if current < len - 1 && input.chars().nth(current + 1).unwrap() == '=' {
                     current += 1;
-                    tokens.push(Token::new(
-                        TokenType::GreaterEqual,
-                        ">=".to_string(),
-                        None,
-                        line,
-                    ));
+                    tokens.push(Token::new(TokenType::GreaterEqual, ">=".to_string(), None, line));
                 } else {
                     tokens.push(Token::new(TokenType::Greater, ">".to_string(), None, line));
                 };
@@ -233,13 +193,7 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
                 current = end - 1;
             }
             _ => {
-                writeln!(
-                    io::stderr(),
-                    "[line {}] Error: Unexpected character: {}",
-                    line,
-                    c
-                )
-                    .unwrap();
+                writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", line, c).unwrap();
                 lox.had_error = true;
             }
         }
