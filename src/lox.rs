@@ -210,12 +210,27 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
                     end += 1;
                 }
                 let identifier = &input[current..end];
-                tokens.push(Token::new(
-                    TokenType::Identifier,
-                    identifier.to_string(),
-                    None,
-                    line,
-                ));
+
+                // reversed words
+                match identifier {
+                    "and" => tokens.push(Token::new(TokenType::And, identifier.to_string(), None, line)),
+                    "class" => tokens.push(Token::new(TokenType::Class, identifier.to_string(), None, line)),
+                    "else" => tokens.push(Token::new(TokenType::Else, identifier.to_string(), None, line)),
+                    "false" => tokens.push(Token::new(TokenType::False, identifier.to_string(), None, line)),
+                    "for" => tokens.push(Token::new(TokenType::For, identifier.to_string(), None, line)),
+                    "fun" => tokens.push(Token::new(TokenType::Fun, identifier.to_string(), None, line)),
+                    "if" => tokens.push(Token::new(TokenType::If, identifier.to_string(), None, line)),
+                    "nil" => tokens.push(Token::new(TokenType::Nil, identifier.to_string(), None, line)),
+                    "or" => tokens.push(Token::new(TokenType::Or, identifier.to_string(), None, line)),
+                    "print" => tokens.push(Token::new(TokenType::Print, identifier.to_string(), None, line)),
+                    "return" => tokens.push(Token::new(TokenType::Return, identifier.to_string(), None, line)),
+                    "super" => tokens.push(Token::new(TokenType::Super, identifier.to_string(), None, line)),
+                    "this" => tokens.push(Token::new(TokenType::This, identifier.to_string(), None, line)),
+                    "true" => tokens.push(Token::new(TokenType::True, identifier.to_string(), None, line)),
+                    "var" => tokens.push(Token::new(TokenType::Var, identifier.to_string(), None, line)),
+                    "while" => tokens.push(Token::new(TokenType::While, identifier.to_string(), None, line)),
+                    _ => tokens.push(Token::new(TokenType::Identifier, identifier.to_string(), None, line)),
+                }
                 current = end - 1;
             }
             _ => {
