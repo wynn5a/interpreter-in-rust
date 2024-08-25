@@ -211,7 +211,6 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
                 }
                 let identifier = &input[current..end];
 
-                // reversed words
                 match identifier {
                     "and" => tokens.push(Token::new(TokenType::And, identifier.to_string(), None, line)),
                     "class" => tokens.push(Token::new(TokenType::Class, identifier.to_string(), None, line)),
