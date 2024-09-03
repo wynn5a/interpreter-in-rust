@@ -2,12 +2,12 @@ use std::fmt;
 
 use crate::token_types::TokenType;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Token {
-    token_type: TokenType,
-    lexeme: String,
-    literal: Option<String>,
-    line: usize,
+    pub(crate) token_type: TokenType,
+    pub(crate) lexeme: String,
+    pub(crate) literal: Option<String>,
+    pub(crate) line: usize,
 }
 
 impl fmt::Display for Token {

@@ -1,26 +1,20 @@
 use crate::token::Token;
 use crate::token_types::TokenType;
 use std::io::Write;
-use std::{io, process};
+use std::io;
 use unicode_segmentation::UnicodeSegmentation;
 
-pub struct Lox {
-    had_error: bool,
+pub struct LoxTokenizer {
+    pub(crate) had_error: bool,
 }
 
-impl Lox {
-    pub(crate) fn tokenize(&mut self, input: &str) {
-        let result = tokenize(self, &input);
-        for token in result {
-            writeln!(io::stdout(), "{}", token).unwrap();
-        }
-        if self.had_error {
-            process::exit(65)
-        };
+impl LoxTokenizer {
+    pub(crate) fn tokenize(&mut self, input: &str) -> Vec<Token>{
+        tokenize(self, &input)
     }
 }
 
-fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
+fn tokenize(lox: &mut LoxTokenizer, input: &str) -> Vec<Token> {
     let mut tokens: Vec<Token> = Vec::new();
     let mut line = 1;
     let mut current = 0;
@@ -203,9 +197,9 @@ fn tokenize(lox: &mut Lox, input: &str) -> Vec<Token> {
     tokens
 }
 
-impl Default for Lox {
+impl Default for LoxTokenizer {
     fn default() -> Self {
-        Lox { had_error: false }
+        LoxTokenizer { had_error: false }
     }
 }
 
@@ -216,7 +210,7 @@ mod tests {
 
     #[test]
     fn test_tokenize() {
-        let mut lox = Lox::default();
+        let mut lox = LoxTokenizer::default();
         let input = "(){},.-+;*";
         let result = tokenize(&mut lox, input);
         let expected = vec![
@@ -237,7 +231,7 @@ mod tests {
 
     #[test]
     fn test_bang() {
-        let mut lox = Lox::default();
+        let mut lox = LoxTokenizer::default();
         let input = "!";
         let result = tokenize(&mut lox, input);
         let expected = vec![
@@ -250,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_bang_equal() {
-        let mut lox = Lox::default();
+        let mut lox = LoxTokenizer::default();
         let input = "!=";
         let result = tokenize(&mut lox, input);
         let expected = vec![
@@ -263,7 +257,7 @@ mod tests {
 
     #[test]
     fn test_equal() {
-        let mut lox = Lox::default();
+        let mut lox = LoxTokenizer::default();
         let input = "=";
         let result = tokenize(&mut lox, input);
         let expected = vec![
@@ -276,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_equal_equal() {
-        let mut lox = Lox::default();
+        let mut lox = LoxTokenizer::default();
         let input = "={===}!!===";
         let result = tokenize(&mut lox, input);
         let expected = vec![
@@ -296,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_less_and_less_equal() {
-        let mut lox = Lox::default();
+        let mut lox = LoxTokenizer::default();
         let input = "<<=<==";
         let result = tokenize(&mut lox, input);
         let expected = vec![
@@ -313,7 +307,7 @@ mod tests {
 
     #[test]
     fn test_greater_and_greater_equal() {
-        let mut lox = Lox::default();
+        let mut lox = LoxTokenizer::default();
         let input = ">>=>==";
         let result = tokenize(&mut lox, input);
         let expected = vec![
@@ -330,7 +324,7 @@ mod tests {
 
     #[test]
     fn test_slash() {
-        let mut lox = Lox::default();
+        let mut lox = LoxTokenizer::default();
         let input = "/";
         let result = tokenize(&mut lox, input);
         let expected = vec![
@@ -343,7 +337,7 @@ mod tests {
 
     #[test]
     fn test_comment() {
-        let mut lox = Lox::default();
+        let mut lox = LoxTokenizer::default();
         let input = "// comment \n///£§᯽☺♣";
         let result = tokenize(&mut lox, input);
         let expected = vec![Token::new(TokenType::Eof, "".to_string(), None, 2)];
@@ -353,7 +347,7 @@ mod tests {
 
     #[test]
     fn test_whitespace() {
-        let mut lox = Lox::default();
+        let mut lox = LoxTokenizer::default();
         let input = "{ }";
         let result = tokenize(&mut lox, input);
         let expected = vec![
@@ -367,7 +361,7 @@ mod tests {
 
     #[test]
     fn test_string() {
-        let mut lox = Lox::default();
+        let mut lox = LoxTokenizer::default();
         let input = "\"Hello, World!\"";
         let result = tokenize(&mut lox, input);
         let expected = vec![
@@ -385,17 +379,25 @@ mod tests {
 
     #[test]
     fn test_unterminated_string() {
-        let mut lox = Lox::default();
-        let input = "\"Hello, World!";
+        let mut lox = LoxTokenizer::default();
+        let input = "\"test\" \"Hello, World!";
         let result = tokenize(&mut lox, input);
-        let expected = vec![Token::new(TokenType::Eof, "".to_string(), None, 1)];
+        let expected = vec![
+            Token::new(
+                TokenType::String,
+                "\"test\"".to_string(),
+                Some(String::from("test")),
+                1,
+            ),
+            Token::new(TokenType::Eof, "".to_string(), None, 1)
+        ];
         assert_eq!(result, expected);
         assert_eq!(lox.had_error, true);
     }
 
     #[test]
     fn test_number() {
-        let mut lox = Lox::default();
+        let mut lox = LoxTokenizer::default();
         let input = "123.456.123.\n200.00";
         let result = tokenize(&mut lox, input);
         let expected = vec![
@@ -426,7 +428,7 @@ mod tests {
     }
     #[test]
     fn test_identifier() {
-        let mut lox = Lox::default();
+        let mut lox = LoxTokenizer::default();
         let input = "var_1 _private camelCase PascalCase";
         let result = tokenize(&mut lox, input);
         let expected = vec![
