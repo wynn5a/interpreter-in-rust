@@ -1,7 +1,7 @@
 use std::{env, process};
 use std::fs;
 use std::io::{self, Write};
-use crate::expr::expr::AstPrinter;
+use crate::expr::AstPrinter;
 use crate::lox_tokenizer::LoxTokenizer;
 
 mod token_types;

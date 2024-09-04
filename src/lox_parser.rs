@@ -1,6 +1,6 @@
 use TokenType::{Bang, BangEqual, EqualEqual, False, Greater, GreaterEqual, LeftParen, Less, LessEqual, Minus, Nil, Number, Plus, Slash, Star, True};
-use crate::expr::expr::ExprEnum;
-use crate::expr::expr::{Binary, Grouping, Literal, Unary};
+use crate::expr::ExprEnum;
+use crate::expr::{Binary, Grouping, Literal, Unary};
 use crate::token::Token;
 use crate::token_types::TokenType;
 

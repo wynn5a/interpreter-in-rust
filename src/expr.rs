@@ -59,13 +59,14 @@ impl Visitor<String> for AstPrinter {
 
     fn visit_literal(&self, expr: &Literal) -> String {
         if let Some(v) = expr.value.downcast_ref::<&str>() {
-            return format!("{}", v);
+            v.to_string()
+        } else if let Some(v) = expr.value.downcast_ref::<String>() {
+            v.clone()
         } else if let Some(v) = expr.value.downcast_ref::<bool>() {
-            return v.to_string();
-        } else if let Some(v) = expr.value.downcast_ref::<i32>() {
-            return v.to_string();
+            v.to_string()
+        } else {
+            panic!("Unsupported type")
         }
-        panic!("Invalid literal type");
     }
 
     fn visit_grouping(&self, expr: &Grouping) -> String {
@@ -138,12 +139,23 @@ mod tests {
         let expr = ExprEnum::Unary(Unary {
             op: Token::new(TokenType::Minus, "-".to_string(), None, 1),
             right: Box::new(ExprEnum::Literal(Literal {
-                value: Box::new(true),
+                value: Box::new(44),
             })),
         });
 
         let ast_printer = AstPrinter {};
         let result = expr.accept(&ast_printer);
-        assert_eq!(result, "(- true)");
+        assert_eq!(result, "(- 44)");
+    }
+
+    #[test]
+    fn test_literal() {
+        let expr = ExprEnum::Literal(Literal {
+            value: Box::new("44.0"),
+        });
+
+        let ast_printer = AstPrinter {};
+        let result = expr.accept(&ast_printer);
+        assert_eq!(result, "44.0");
     }
 }
