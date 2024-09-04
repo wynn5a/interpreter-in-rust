@@ -42,11 +42,18 @@ fn main() {
 
             if !file_contents.is_empty() {
                 writeln!(io::stderr(), "Read file with content: {}", file_contents).unwrap();
-                let tokens = LoxTokenizer::default().tokenize(&file_contents);
+                let mut lox_tokenizer = LoxTokenizer::default();
+                let tokens = lox_tokenizer.tokenize(&file_contents);
+                if lox_tokenizer.had_error {
+                    process::exit(65)
+                }
+                for token in tokens.clone() {
+                    writeln!(io::stderr(), "{}", token).unwrap();
+                }
                 let mut parser = lox_parser::LoxParser::new(tokens);
                 let expr = parser.parse();
                 if parser.has_error {
-                    return;
+                    process::exit(65);
                 }
                 println!("{}", expr.accept(&AstPrinter {}));
             } else {

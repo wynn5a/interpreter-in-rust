@@ -1,4 +1,4 @@
-use TokenType::{Bang, BangEqual, EqualEqual, False, Greater, GreaterEqual, LeftParen, Less, LessEqual, Minus, Nil, Number, Plus, Slash, Star, True};
+use TokenType::{Bang, BangEqual, EqualEqual, False, Greater, GreaterEqual, Identifier, LeftParen, Less, LessEqual, Minus, Nil, Number, Plus, Slash, Star, True};
 use crate::expr::ExprEnum;
 use crate::expr::{Binary, Grouping, Literal, Unary};
 use crate::token::Token;
@@ -143,6 +143,12 @@ impl LoxParser {
             }));
         }
 
+        if self.match_tokens(vec![Identifier]) {
+            return Box::new(ExprEnum::Literal(Literal {
+                value: Box::new(self.previous().lexeme),
+            }));
+        }
+
         if self.match_tokens(vec![LeftParen]) {
             let expr = self.expression();
             self.consume(TokenType::RightParen, "Expect ')' after expression.");
@@ -151,7 +157,8 @@ impl LoxParser {
             }));
         }
 
-        panic!("Expect expression.");
+        self.error(self.peek(), "Expect expression.");
+        Box::new(ExprEnum::None)
     }
 
     fn consume(&mut self, token_type: TokenType, err: &str) {
@@ -210,4 +217,56 @@ impl LoxParser {
 fn report(line: usize, location: &str, msg: &str) {
     eprintln!("[line {}] Error{}: {}", line, location, msg);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::token::Token;
+    use crate::token_types::TokenType;
+    use crate::token_types::TokenType::RightParen;
+
+    #[test]
+    fn test_parser() {
+        let tokens = vec![
+            Token::new(TokenType::Number, "1".to_string(), Some("1".to_string()), 1),
+            Token::new(TokenType::Plus, "+".to_string(), None, 1),
+            Token::new(TokenType::Number, "2".to_string(), Some("2".to_string()), 1),
+            Token::new(TokenType::Star, "*".to_string(), None, 1),
+            Token::new(TokenType::Number, "3".to_string(), Some("3".to_string()), 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let mut parser = LoxParser::new(tokens);
+        let expr = parser.parse();
+        let ast_printer = crate::expr::AstPrinter {};
+        assert_eq!(expr.accept(&ast_printer), "(+ 1 (* 2 3))");
+    }
+
+    #[test]
+    fn test_error(){
+        // let tokens = vec![
+        //     Token::new(LeftParen, "(".to_string(), Some("(".to_string()), 1),
+        //     Token::new(Identifier, "foo".to_string(), Some("foo".to_string()), 1),
+        //     Token::new(TokenType::Eof, "".to_string(), None, 1),
+        // ];
+        //
+        // let mut parser = LoxParser::new(tokens);
+        // let _ = parser.parse();
+        // assert!(parser.has_error);
+        //(92 +)
+        let tokens = vec![
+            Token::new(LeftParen, "(".to_string(), Some("(".to_string()), 1),
+            Token::new(Number, "92".to_string(), Some("92.0".to_string()), 1),
+            Token::new(Plus, "+".to_string(), None, 1),
+            Token::new(RightParen, ")".to_string(), Some(")".to_string()), 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let mut parser = LoxParser::new(tokens);
+        let _ = parser.parse();
+        assert!(parser.has_error);
+    }
+}
+
+
 
