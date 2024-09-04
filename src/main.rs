@@ -8,7 +8,6 @@ mod token_types;
 mod token;
 mod lox_tokenizer;
 mod expr;
-mod ast;
 mod lox_parser;
 
 fn main() {
