@@ -1,14 +1,14 @@
-use std::{env, process};
-use std::fs;
-use std::io::{self, Write};
 use crate::expr::AstPrinter;
 use crate::lox_tokenizer::LoxTokenizer;
+use std::fs;
+use std::io::{self, Write};
+use std::{env, process};
 
-mod token_types;
-mod token;
-mod lox_tokenizer;
 mod expr;
 mod lox_parser;
+mod lox_tokenizer;
+mod token;
+mod token_types;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -20,45 +20,56 @@ fn main() {
     let command = &args[1];
     let filename = &args[2];
 
+    let file_contents = read_file(filename);
+    if file_contents.is_empty() {
+        writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+        process::exit(74);
+    }
+
+    writeln!(io::stderr(), "Read file with content: {}", file_contents).unwrap();
+
     match command.as_str() {
         "tokenize" => {
-            let file_contents = read_file(filename);
-            if !file_contents.is_empty() {
-                writeln!(io::stderr(), "Read file with content: {}", file_contents).unwrap();
-                let mut tokenizer = LoxTokenizer::default();
-                let result = tokenizer.tokenize(&file_contents);
-                for token in result {
-                     writeln!(io::stdout(), "{}", token).unwrap();
-                }
-                if tokenizer.had_error {
-                    process::exit(65)
-                };
-            } else {
-                println!("EOF  null"); // Placeholder, remove this line when implementing the scanner
+            let mut tokenizer = LoxTokenizer::default();
+            let result = tokenizer.tokenize(&file_contents);
+            for token in result {
+                writeln!(io::stdout(), "{}", token).unwrap();
             }
+            if tokenizer.had_error {
+                process::exit(65)
+            };
         }
         "parse" => {
-            let file_contents = read_file(filename);
-
-            if !file_contents.is_empty() {
-                writeln!(io::stderr(), "Read file with content: {}", file_contents).unwrap();
-                let mut lox_tokenizer = LoxTokenizer::default();
-                let tokens = lox_tokenizer.tokenize(&file_contents);
-                if lox_tokenizer.had_error {
-                    process::exit(65)
-                }
-                for token in tokens.clone() {
-                    writeln!(io::stderr(), "{}", token).unwrap();
-                }
-                let mut parser = lox_parser::LoxParser::new(tokens);
-                let expr = parser.parse();
-                if parser.has_error {
-                    process::exit(65);
-                }
-                println!("{}", expr.accept(&AstPrinter {}));
-            } else {
-                eprintln!("Cannot read from the file");
+            let mut lox_tokenizer = LoxTokenizer::default();
+            let tokens = lox_tokenizer.tokenize(&file_contents);
+            if lox_tokenizer.had_error {
+                process::exit(65)
             }
+            for token in tokens.clone() {
+                writeln!(io::stderr(), "{}", token).unwrap();
+            }
+            let mut parser = lox_parser::LoxParser::new(tokens);
+            let expr = parser.parse();
+            if parser.has_error {
+                process::exit(65);
+            }
+            println!("{}", expr.accept(&AstPrinter {}));
+        }
+        "evaluate" => {
+            let mut lox_tokenizer = LoxTokenizer::default();
+            let tokens = lox_tokenizer.tokenize(&file_contents);
+            if lox_tokenizer.had_error {
+                process::exit(65)
+            }
+            for token in tokens.clone() {
+                writeln!(io::stderr(), "{}", token).unwrap();
+            }
+            let mut parser = lox_parser::LoxParser::new(tokens);
+            let expr = parser.parse();
+            if parser.has_error {
+                process::exit(65);
+            }
+            println!("{}", expr.accept(&AstPrinter {}));
         }
         _ => {
             writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
