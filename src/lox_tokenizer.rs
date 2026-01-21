@@ -22,6 +22,14 @@ struct TokenizerState<'a> {
 }
 
 impl<'a> TokenizerState<'a> {
+    /// Creates a new TokenizerState with the input string.
+    /// Converts the input string to a vector of characters for efficient character access.
+    ///
+    /// # Arguments
+    /// * `input` - The source code string to tokenize
+    ///
+    /// # Returns
+    /// A new TokenizerState instance initialized for tokenization
     fn new(input: &'a str) -> Self {
         TokenizerState {
             chars: input.chars().collect(),
@@ -32,18 +40,37 @@ impl<'a> TokenizerState<'a> {
         }
     }
 
+    /// Checks if the tokenizer has reached the end of the input.
+    ///
+    /// # Returns
+    /// `true` if all characters have been consumed, `false` otherwise
     fn is_at_end(&self) -> bool {
         self.current >= self.chars.len()
     }
 
+    /// Returns the current character without advancing the position.
+    /// Returns None if at end of input.
+    ///
+    /// # Returns
+    /// The current character or None if at end of input
     fn peek(&self) -> Option<char> {
         self.chars.get(self.current).copied()
     }
 
+    /// Returns the next character without advancing the position.
+    /// Returns None if at end of input or no next character exists.
+    ///
+    /// # Returns
+    /// The next character or None if at end of input
     fn peek_next(&self) -> Option<char> {
         self.chars.get(self.current + 1).copied()
     }
 
+    /// Consumes and returns the current character, advancing the position.
+    /// Returns None if at end of input.
+    ///
+    /// # Returns
+    /// The current character or None if at end of input
     fn advance(&mut self) -> Option<char> {
         if self.is_at_end() {
             None
@@ -54,6 +81,14 @@ impl<'a> TokenizerState<'a> {
         }
     }
 
+    /// Consumes the current character if it matches the expected character.
+    /// Advances position only if the character matches.
+    ///
+    /// # Arguments
+    /// * `expected` - The character to match against
+    ///
+    /// # Returns
+    /// `true` if the character matched and was consumed, `false` otherwise
     fn match_char(&mut self, expected: char) -> bool {
         if self.is_at_end() || self.chars[self.current] != expected {
             false
@@ -63,18 +98,47 @@ impl<'a> TokenizerState<'a> {
         }
     }
 
+    /// Adds a new token to the token list using the current line number.
+    ///
+    /// # Arguments
+    /// * `token_type` - The type of token (e.g., TokenType::Plus)
+    /// * `lexeme` - The raw string representation of the token
+    /// * `literal` - Optional literal value (for strings and numbers)
     fn add_token(&mut self, token_type: TokenType, lexeme: String, literal: Option<String>) {
         self.tokens.push(Token::new(token_type, lexeme, literal, self.line));
     }
 
+    /// Adds a new token to the token list with a specific line number.
+    /// Used when the token spans multiple lines or needs a specific line number.
+    ///
+    /// # Arguments
+    /// * `token_type` - The type of token (e.g., TokenType::String)
+    /// * `lexeme` - The raw string representation of the token
+    /// * `literal` - Optional literal value (for strings and numbers)
+    /// * `line` - The line number where this token starts
     fn add_token_with_line(&mut self, token_type: TokenType, lexeme: String, literal: Option<String>, line: usize) {
         self.tokens.push(Token::new(token_type, lexeme, literal, line));
     }
 
+    /// Creates a token for single-character operators and punctuation.
+    /// Used for tokens like parentheses, braces, arithmetic operators, etc.
+    ///
+    /// # Arguments
+    /// * `token_type` - The token type for this character
+    /// * `lexeme` - The string representation (usually a single character)
     fn handle_single_char_token(&mut self, token_type: TokenType, lexeme: &str) {
         self.add_token(token_type, lexeme.to_string(), None);
     }
 
+    /// Handles two-character operators like ==, !=, <=, >=.
+    /// Checks if the next character is '=' and creates the appropriate token.
+    ///
+    /// # Arguments
+    /// * `_c` - The first character (unused, for documentation)
+    /// * `single_type` - Token type for single character (e.g., TokenType::Less)
+    /// * `double_type` - Token type for double character (e.g., TokenType::LessEqual)
+    /// * `single_lexeme` - String for single character (e.g., "<")
+    /// * `double_lexeme` - String for double character (e.g., "<=")
     fn handle_two_char_operator(&mut self, _c: char, single_type: TokenType, double_type: TokenType, single_lexeme: &str, double_lexeme: &str) {
         if self.match_char('=') {
             self.add_token(double_type, double_lexeme.to_string(), None);
@@ -83,12 +147,20 @@ impl<'a> TokenizerState<'a> {
         }
     }
 
+    /// Consumes characters until the end of the line to skip comments.
+    /// Comments start with // and continue until newline or end of input.
     fn handle_comment(&mut self) {
         while !self.is_at_end() && self.peek() != Some('\n') {
             self.advance();
         }
     }
 
+    /// Parses a string literal from the current position.
+    /// Handles multiline strings and properly tracks line numbers.
+    /// Reports an error if the string is unterminated.
+    ///
+    /// # Arguments
+    /// * `lox` - Reference to the main tokenizer for error reporting
     fn handle_string(&mut self, lox: &mut LoxTokenizer) {
         let start_line = self.line;
         let mut value_chars = Vec::new();
@@ -114,6 +186,9 @@ impl<'a> TokenizerState<'a> {
         self.add_token_with_line(TokenType::String, format!("\"{}\"", value), Some(value), start_line);
     }
 
+    /// Parses a number literal (integer or decimal) from the current position.
+    /// Handles both integer and floating-point numbers.
+    /// The first digit has already been consumed when this method is called.
     fn handle_number(&mut self) {
         let start = self.current - 1; // We already consumed the first digit
 
@@ -136,6 +211,9 @@ impl<'a> TokenizerState<'a> {
         self.add_token(TokenType::Number, number_str.to_string(), Some(format!("{:?}", literal)));
     }
 
+    /// Parses an identifier or keyword from the current position.
+    /// Checks if the identifier matches any Lox reserved keywords.
+    /// The first character has already been consumed when this method is called.
     fn handle_identifier(&mut self) {
         let start = self.current - 1; // We already consumed the first character
 

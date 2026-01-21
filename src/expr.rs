@@ -64,6 +64,12 @@ impl Visitor<String> for AstPrinter {
             v.clone()
         } else if let Some(v) = expr.value.downcast_ref::<bool>() {
             v.to_string()
+        } else if let Some(v) = expr.value.downcast_ref::<i32>() {
+            v.to_string()
+        } else if let Some(v) = expr.value.downcast_ref::<i64>() {
+            v.to_string()
+        } else if let Some(v) = expr.value.downcast_ref::<f64>() {
+            v.to_string()
         } else {
             panic!("Unsupported type")
         }

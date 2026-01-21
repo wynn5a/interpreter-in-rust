@@ -225,6 +225,13 @@ mod tests {
     use crate::token_types::TokenType;
     use crate::token_types::TokenType::RightParen;
 
+    fn parse_and_print(tokens: Vec<Token>) -> (String, bool) {
+        let mut parser = LoxParser::new(tokens);
+        let expr = parser.parse();
+        let ast_printer = crate::expr::AstPrinter {};
+        (expr.accept(&ast_printer), parser.has_error)
+    }
+
     #[test]
     fn test_parser() {
         let tokens = vec![
@@ -236,10 +243,9 @@ mod tests {
             Token::new(TokenType::Eof, "".to_string(), None, 1),
         ];
 
-        let mut parser = LoxParser::new(tokens);
-        let expr = parser.parse();
-        let ast_printer = crate::expr::AstPrinter {};
-        assert_eq!(expr.accept(&ast_printer), "(+ 1 (* 2 3))");
+        let (printed, has_error) = parse_and_print(tokens);
+        assert_eq!(printed, "(+ 1 (* 2 3))");
+        assert!(!has_error);
     }
 
     #[test]
@@ -265,6 +271,86 @@ mod tests {
         let mut parser = LoxParser::new(tokens);
         let _ = parser.parse();
         assert!(parser.has_error);
+    }
+
+    #[test]
+    fn test_parser_precedence_chain() {
+        let tokens = vec![
+            Token::new(TokenType::Number, "1".to_string(), Some("1".to_string()), 1),
+            Token::new(TokenType::Plus, "+".to_string(), None, 1),
+            Token::new(TokenType::Number, "2".to_string(), Some("2".to_string()), 1),
+            Token::new(TokenType::Star, "*".to_string(), None, 1),
+            Token::new(TokenType::Number, "3".to_string(), Some("3".to_string()), 1),
+            Token::new(TokenType::Minus, "-".to_string(), None, 1),
+            Token::new(TokenType::Number, "4".to_string(), Some("4".to_string()), 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let (printed, has_error) = parse_and_print(tokens);
+        assert_eq!(printed, "(- (+ 1 (* 2 3)) 4)");
+        assert!(!has_error);
+    }
+
+    #[test]
+    fn test_parser_grouping() {
+        let tokens = vec![
+            Token::new(LeftParen, "(".to_string(), Some("(".to_string()), 1),
+            Token::new(TokenType::Number, "1".to_string(), Some("1".to_string()), 1),
+            Token::new(TokenType::Plus, "+".to_string(), None, 1),
+            Token::new(TokenType::Number, "2".to_string(), Some("2".to_string()), 1),
+            Token::new(RightParen, ")".to_string(), Some(")".to_string()), 1),
+            Token::new(TokenType::Star, "*".to_string(), None, 1),
+            Token::new(TokenType::Number, "3".to_string(), Some("3".to_string()), 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let (printed, has_error) = parse_and_print(tokens);
+        assert_eq!(printed, "(* (group (+ 1 2)) 3)");
+        assert!(!has_error);
+    }
+
+    #[test]
+    fn test_parser_unary_chain() {
+        let tokens = vec![
+            Token::new(TokenType::Bang, "!".to_string(), None, 1),
+            Token::new(TokenType::Minus, "-".to_string(), None, 1),
+            Token::new(TokenType::True, "true".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let (printed, has_error) = parse_and_print(tokens);
+        assert_eq!(printed, "(! (- true))");
+        assert!(!has_error);
+    }
+
+    #[test]
+    fn test_parser_equality_comparison() {
+        let tokens = vec![
+            Token::new(TokenType::Number, "1".to_string(), Some("1".to_string()), 1),
+            Token::new(TokenType::Less, "<".to_string(), None, 1),
+            Token::new(TokenType::Number, "2".to_string(), Some("2".to_string()), 1),
+            Token::new(TokenType::EqualEqual, "==".to_string(), None, 1),
+            Token::new(TokenType::False, "false".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let (printed, has_error) = parse_and_print(tokens);
+        assert_eq!(printed, "(== (< 1 2) false)");
+        assert!(!has_error);
+    }
+
+    #[test]
+    fn test_parser_identifiers() {
+        let tokens = vec![
+            Token::new(TokenType::Identifier, "foo".to_string(), None, 1),
+            Token::new(TokenType::EqualEqual, "==".to_string(), None, 1),
+            Token::new(TokenType::Identifier, "bar".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let (printed, has_error) = parse_and_print(tokens);
+        assert_eq!(printed, "(== foo bar)");
+        assert!(!has_error);
     }
 }
 
