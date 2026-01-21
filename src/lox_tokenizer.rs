@@ -2,7 +2,6 @@ use crate::token::Token;
 use crate::token_types::TokenType;
 use std::io::Write;
 use std::io;
-use unicode_segmentation::UnicodeSegmentation;
 
 pub struct LoxTokenizer {
     pub(crate) had_error: bool,
@@ -14,187 +13,205 @@ impl LoxTokenizer {
     }
 }
 
-fn tokenize(lox: &mut LoxTokenizer, input: &str) -> Vec<Token> {
-    let mut tokens: Vec<Token> = Vec::new();
-    let mut line = 1;
-    let mut current = 0;
+struct TokenizerState<'a> {
+    chars: Vec<char>,
+    current: usize,
+    line: usize,
+    tokens: Vec<Token>,
+    input: &'a str,
+}
 
-    let len = input.graphemes(true).count();
-    while current < len {
-        let c = input.chars().nth(current).unwrap();
+impl<'a> TokenizerState<'a> {
+    fn new(input: &'a str) -> Self {
+        TokenizerState {
+            chars: input.chars().collect(),
+            current: 0,
+            line: 1,
+            tokens: Vec::new(),
+            input,
+        }
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.current >= self.chars.len()
+    }
+
+    fn peek(&self) -> Option<char> {
+        self.chars.get(self.current).copied()
+    }
+
+    fn peek_next(&self) -> Option<char> {
+        self.chars.get(self.current + 1).copied()
+    }
+
+    fn advance(&mut self) -> Option<char> {
+        if self.is_at_end() {
+            None
+        } else {
+            let c = self.chars[self.current];
+            self.current += 1;
+            Some(c)
+        }
+    }
+
+    fn match_char(&mut self, expected: char) -> bool {
+        if self.is_at_end() || self.chars[self.current] != expected {
+            false
+        } else {
+            self.current += 1;
+            true
+        }
+    }
+
+    fn add_token(&mut self, token_type: TokenType, lexeme: String, literal: Option<String>) {
+        self.tokens.push(Token::new(token_type, lexeme, literal, self.line));
+    }
+
+    fn add_token_with_line(&mut self, token_type: TokenType, lexeme: String, literal: Option<String>, line: usize) {
+        self.tokens.push(Token::new(token_type, lexeme, literal, line));
+    }
+
+    fn handle_single_char_token(&mut self, token_type: TokenType, lexeme: &str) {
+        self.add_token(token_type, lexeme.to_string(), None);
+    }
+
+    fn handle_two_char_operator(&mut self, _c: char, single_type: TokenType, double_type: TokenType, single_lexeme: &str, double_lexeme: &str) {
+        if self.match_char('=') {
+            self.add_token(double_type, double_lexeme.to_string(), None);
+        } else {
+            self.add_token(single_type, single_lexeme.to_string(), None);
+        }
+    }
+
+    fn handle_comment(&mut self) {
+        while !self.is_at_end() && self.peek() != Some('\n') {
+            self.advance();
+        }
+    }
+
+    fn handle_string(&mut self, lox: &mut LoxTokenizer) {
+        let start_line = self.line;
+        let mut value_chars = Vec::new();
+
+        while !self.is_at_end() && self.peek() != Some('"') {
+            let c = self.advance().unwrap();
+            if c == '\n' {
+                self.line += 1;
+            }
+            value_chars.push(c);
+        }
+
+        if self.is_at_end() {
+            writeln!(io::stderr(), "[line {}] Error: Unterminated string.", start_line).unwrap();
+            lox.had_error = true;
+            return;
+        }
+
+        // Consume the closing quote
+        self.advance();
+
+        let value: String = value_chars.into_iter().collect();
+        self.add_token_with_line(TokenType::String, format!("\"{}\"", value), Some(value), start_line);
+    }
+
+    fn handle_number(&mut self) {
+        let start = self.current - 1; // We already consumed the first digit
+
+        while !self.is_at_end() && self.peek().unwrap().is_ascii_digit() {
+            self.advance();
+        }
+
+        // Look for fractional part
+        if !self.is_at_end() && self.peek() == Some('.') && self.peek_next().map_or(false, |c| c.is_ascii_digit()) {
+            // Consume the '.'
+            self.advance();
+
+            while !self.is_at_end() && self.peek().unwrap().is_ascii_digit() {
+                self.advance();
+            }
+        }
+
+        let number_str = &self.input[start..self.current];
+        let literal = number_str.parse::<f32>().unwrap();
+        self.add_token(TokenType::Number, number_str.to_string(), Some(format!("{:?}", literal)));
+    }
+
+    fn handle_identifier(&mut self) {
+        let start = self.current - 1; // We already consumed the first character
+
+        while !self.is_at_end() && (self.peek().unwrap().is_alphanumeric() || self.peek() == Some('_')) {
+            self.advance();
+        }
+
+        let identifier = &self.input[start..self.current];
+        let token_type = match identifier {
+            "and" => TokenType::And,
+            "class" => TokenType::Class,
+            "else" => TokenType::Else,
+            "false" => TokenType::False,
+            "for" => TokenType::For,
+            "fun" => TokenType::Fun,
+            "if" => TokenType::If,
+            "nil" => TokenType::Nil,
+            "or" => TokenType::Or,
+            "print" => TokenType::Print,
+            "return" => TokenType::Return,
+            "super" => TokenType::Super,
+            "this" => TokenType::This,
+            "true" => TokenType::True,
+            "var" => TokenType::Var,
+            "while" => TokenType::While,
+            _ => TokenType::Identifier,
+        };
+
+        self.add_token(token_type, identifier.to_string(), None);
+    }
+}
+
+fn tokenize(lox: &mut LoxTokenizer, input: &str) -> Vec<Token> {
+    let mut state = TokenizerState::new(input);
+
+    while !state.is_at_end() {
+        let c = state.advance().unwrap();
+
         match c {
-            '\n' => {
-                line += 1;
-            }
-            '(' => {
-                tokens.push(Token::new(TokenType::LeftParen, "(".to_string(), None, line));
-            }
-            ')' => {
-                tokens.push(Token::new(TokenType::RightParen, ")".to_string(), None, line));
-            }
-            '{' => {
-                tokens.push(Token::new(TokenType::LeftBrace, "{".to_string(), None, line));
-            }
-            '}' => {
-                tokens.push(Token::new(TokenType::RightBrace, "}".to_string(), None, line));
-            }
-            ',' => {
-                tokens.push(Token::new(TokenType::Comma, ",".to_string(), None, line));
-            }
-            '.' => {
-                tokens.push(Token::new(TokenType::Dot, ".".to_string(), None, line));
-            }
-            '-' => {
-                tokens.push(Token::new(TokenType::Minus, "-".to_string(), None, line));
-            }
-            '+' => {
-                tokens.push(Token::new(TokenType::Plus, "+".to_string(), None, line));
-            }
-            ';' => {
-                tokens.push(Token::new(TokenType::Semicolon, ";".to_string(), None, line));
-            }
-            '*' => {
-                tokens.push(Token::new(TokenType::Star, "*".to_string(), None, line));
-            }
-            '!' => {
-                if current < len - 1 && input.chars().nth(current + 1).unwrap() == '=' {
-                    current += 1;
-                    tokens.push(Token::new(TokenType::BangEqual, "!=".to_string(), None, line));
-                } else {
-                    tokens.push(Token::new(TokenType::Bang, "!".to_string(), None, line));
-                };
-            }
-            '=' => {
-                if current < len - 1 && input.chars().nth(current + 1).unwrap() == '=' {
-                    current += 1;
-                    tokens.push(Token::new(
-                        TokenType::EqualEqual,
-                        "==".to_string(),
-                        None,
-                        line,
-                    ));
-                } else {
-                    tokens.push(Token::new(TokenType::Equal, "=".to_string(), None, line));
-                };
-            }
-            '<' => {
-                if current < len - 1 && input.chars().nth(current + 1).unwrap() == '=' {
-                    current += 1;
-                    tokens.push(Token::new(TokenType::LessEqual, "<=".to_string(), None, line));
-                } else {
-                    tokens.push(Token::new(TokenType::Less, "<".to_string(), None, line));
-                };
-            }
-            '>' => {
-                if current < len - 1 && input.chars().nth(current + 1).unwrap() == '=' {
-                    current += 1;
-                    tokens.push(Token::new(TokenType::GreaterEqual, ">=".to_string(), None, line));
-                } else {
-                    tokens.push(Token::new(TokenType::Greater, ">".to_string(), None, line));
-                };
-            }
+            '\n' => state.line += 1,
+            '(' => state.handle_single_char_token(TokenType::LeftParen, "("),
+            ')' => state.handle_single_char_token(TokenType::RightParen, ")"),
+            '{' => state.handle_single_char_token(TokenType::LeftBrace, "{"),
+            '}' => state.handle_single_char_token(TokenType::RightBrace, "}"),
+            ',' => state.handle_single_char_token(TokenType::Comma, ","),
+            '.' => state.handle_single_char_token(TokenType::Dot, "."),
+            '-' => state.handle_single_char_token(TokenType::Minus, "-"),
+            '+' => state.handle_single_char_token(TokenType::Plus, "+"),
+            ';' => state.handle_single_char_token(TokenType::Semicolon, ";"),
+            '*' => state.handle_single_char_token(TokenType::Star, "*"),
+            '!' => state.handle_two_char_operator('!', TokenType::Bang, TokenType::BangEqual, "!", "!="),
+            '=' => state.handle_two_char_operator('=', TokenType::Equal, TokenType::EqualEqual, "=", "=="),
+            '<' => state.handle_two_char_operator('<', TokenType::Less, TokenType::LessEqual, "<", "<="),
+            '>' => state.handle_two_char_operator('>', TokenType::Greater, TokenType::GreaterEqual, ">", ">="),
             '/' => {
-                if current < len - 1 && input.chars().nth(current + 1).unwrap() == '/' {
-                    current += 1;
-                    while current < len && input.chars().nth(current).unwrap() != '\n' {
-                        current += 1;
-                    }
-                    if current < len {
-                        line += 1;
-                    }
+                if state.match_char('/') {
+                    state.handle_comment();
                 } else {
-                    tokens.push(Token::new(TokenType::Slash, "/".to_string(), None, line));
+                    state.handle_single_char_token(TokenType::Slash, "/");
                 }
             }
             ' ' | '\r' | '\t' => {
                 // Ignore whitespace
             }
-            '"' => {
-                let start = current + 1;
-                while current < len - 1 && input.chars().nth(current + 1).unwrap() != '"' {
-                    current += 1;
-                    if input.chars().nth(current).unwrap() == '\n' {
-                        line += 1;
-                    }
-                }
-
-                if current == len - 1 || input.chars().nth(current + 1).unwrap() != '"' {
-                    writeln!(io::stderr(), "[line {}] Error: Unterminated string.", line).unwrap();
-                    lox.had_error = true;
-                } else {
-                    let value = input[start..current + 1].to_string();
-                    tokens.push(Token::new(
-                        TokenType::String,
-                        format!("\"{}\"", value),
-                        Some(value),
-                        line,
-                    ));
-                    current += 1;
-                }
-            }
-            '0'..='9' => {
-                let start = current;
-                while current < len && input.chars().nth(current).unwrap().is_numeric() {
-                    current += 1;
-                }
-                if current < len && input.chars().nth(current).unwrap() == '.' {
-                    current += 1;
-                    while current < len && input.chars().nth(current).unwrap().is_numeric() {
-                        current += 1;
-                    }
-                }
-                let mut value = input[start..current].to_string();
-                let literal = value.clone();
-                let literal = literal.parse::<f32>().unwrap();
-                if value.ends_with(".") {
-                    value.remove(value.len() - 1);
-                    current -= 1;
-                }
-
-                tokens.push(Token::new(TokenType::Number, value, Some(format!("{:?}", literal)), line));
-                current -= 1;
-            }
-            'a'..='z' | 'A'..='Z' | '_' => {
-                let mut end = current;
-                while end < len {
-                    let ch = input.chars().nth(end).unwrap();
-                    if !ch.is_alphanumeric() && ch != '_' {
-                        break;
-                    }
-                    end += 1;
-                }
-                let identifier = &input[current..end];
-
-                match identifier {
-                    "and" => tokens.push(Token::new(TokenType::And, identifier.to_string(), None, line)),
-                    "class" => tokens.push(Token::new(TokenType::Class, identifier.to_string(), None, line)),
-                    "else" => tokens.push(Token::new(TokenType::Else, identifier.to_string(), None, line)),
-                    "false" => tokens.push(Token::new(TokenType::False, identifier.to_string(), None, line)),
-                    "for" => tokens.push(Token::new(TokenType::For, identifier.to_string(), None, line)),
-                    "fun" => tokens.push(Token::new(TokenType::Fun, identifier.to_string(), None, line)),
-                    "if" => tokens.push(Token::new(TokenType::If, identifier.to_string(), None, line)),
-                    "nil" => tokens.push(Token::new(TokenType::Nil, identifier.to_string(), None, line)),
-                    "or" => tokens.push(Token::new(TokenType::Or, identifier.to_string(), None, line)),
-                    "print" => tokens.push(Token::new(TokenType::Print, identifier.to_string(), None, line)),
-                    "return" => tokens.push(Token::new(TokenType::Return, identifier.to_string(), None, line)),
-                    "super" => tokens.push(Token::new(TokenType::Super, identifier.to_string(), None, line)),
-                    "this" => tokens.push(Token::new(TokenType::This, identifier.to_string(), None, line)),
-                    "true" => tokens.push(Token::new(TokenType::True, identifier.to_string(), None, line)),
-                    "var" => tokens.push(Token::new(TokenType::Var, identifier.to_string(), None, line)),
-                    "while" => tokens.push(Token::new(TokenType::While, identifier.to_string(), None, line)),
-                    _ => tokens.push(Token::new(TokenType::Identifier, identifier.to_string(), None, line)),
-                }
-                current = end - 1;
-            }
+            '"' => state.handle_string(lox),
+            '0'..='9' => state.handle_number(),
+            'a'..='z' | 'A'..='Z' | '_' => state.handle_identifier(),
             _ => {
-                writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", line, c).unwrap();
+                writeln!(io::stderr(), "[line {}] Error: Unexpected character: {}", state.line, c).unwrap();
                 lox.had_error = true;
             }
         }
-        current += 1;
     }
-    tokens.push(Token::new(TokenType::Eof, "".to_string(), None, line));
-    tokens
+
+    state.add_token(TokenType::Eof, "".to_string(), None);
+    state.tokens
 }
 
 impl Default for LoxTokenizer {
@@ -436,6 +453,220 @@ mod tests {
             Token::new(TokenType::Identifier, "_private".to_string(), None, 1),
             Token::new(TokenType::Identifier, "camelCase".to_string(), None, 1),
             Token::new(TokenType::Identifier, "PascalCase".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_keywords() {
+        let mut lox = LoxTokenizer::default();
+        let input = "and class else false fun for if nil or print return super this true var while";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::And, "and".to_string(), None, 1),
+            Token::new(TokenType::Class, "class".to_string(), None, 1),
+            Token::new(TokenType::Else, "else".to_string(), None, 1),
+            Token::new(TokenType::False, "false".to_string(), None, 1),
+            Token::new(TokenType::Fun, "fun".to_string(), None, 1),
+            Token::new(TokenType::For, "for".to_string(), None, 1),
+            Token::new(TokenType::If, "if".to_string(), None, 1),
+            Token::new(TokenType::Nil, "nil".to_string(), None, 1),
+            Token::new(TokenType::Or, "or".to_string(), None, 1),
+            Token::new(TokenType::Print, "print".to_string(), None, 1),
+            Token::new(TokenType::Return, "return".to_string(), None, 1),
+            Token::new(TokenType::Super, "super".to_string(), None, 1),
+            Token::new(TokenType::This, "this".to_string(), None, 1),
+            Token::new(TokenType::True, "true".to_string(), None, 1),
+            Token::new(TokenType::Var, "var".to_string(), None, 1),
+            Token::new(TokenType::While, "while".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_keywords_case_sensitive() {
+        let mut lox = LoxTokenizer::default();
+        let input = "AND Class ELSE";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::Identifier, "AND".to_string(), None, 1),
+            Token::new(TokenType::Identifier, "Class".to_string(), None, 1),
+            Token::new(TokenType::Identifier, "ELSE".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_number_edge_cases() {
+        let mut lox = LoxTokenizer::default();
+        let input = "0 0.0 0.5 0123 123.";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::Number, "0".to_string(), Some("0.0".to_string()), 1),
+            Token::new(TokenType::Number, "0.0".to_string(), Some("0.0".to_string()), 1),
+            Token::new(TokenType::Number, "0.5".to_string(), Some("0.5".to_string()), 1),
+            Token::new(TokenType::Number, "0123".to_string(), Some("123.0".to_string()), 1),
+            Token::new(TokenType::Number, "123".to_string(), Some("123.0".to_string()), 1),
+            Token::new(TokenType::Dot, ".".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_number_single_zero() {
+        let mut lox = LoxTokenizer::default();
+        let input = "0";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::Number, "0".to_string(), Some("0.0".to_string()), 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_empty_string() {
+        let mut lox = LoxTokenizer::default();
+        let input = "\"\"";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::String, "\"\"".to_string(), Some("".to_string()), 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_string_with_newlines() {
+        let mut lox = LoxTokenizer::default();
+        let input = "\"Hello\nWorld\"";
+        let result = tokenize(&mut lox, input);
+        // The string token should be on line 1 (where it started), EOF on line 2
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].token_type, TokenType::String);
+        assert_eq!(result[0].lexeme, "\"Hello\nWorld\"");
+        assert_eq!(result[0].literal, Some("Hello\nWorld".to_string()));
+        assert_eq!(result[0].line, 1); // String starts on line 1
+        assert_eq!(result[1].token_type, TokenType::Eof);
+        assert_eq!(result[1].line, 2); // EOF is on line 2
+        assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_string_with_unicode() {
+        let mut lox = LoxTokenizer::default();
+        let input = "\"Hello café\"";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::String, "\"Hello café\"".to_string(), Some("Hello café".to_string()), 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_unexpected_characters() {
+        let mut lox = LoxTokenizer::default();
+        let input = "@#$%^&";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, true);
+    }
+
+    #[test]
+    fn test_mixed_valid_and_invalid() {
+        let mut lox = LoxTokenizer::default();
+        let input = "var x = 42 @ print";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::Var, "var".to_string(), None, 1),
+            Token::new(TokenType::Identifier, "x".to_string(), None, 1),
+            Token::new(TokenType::Equal, "=".to_string(), None, 1),
+            Token::new(TokenType::Number, "42".to_string(), Some("42.0".to_string()), 1),
+            Token::new(TokenType::Print, "print".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, true); // Should have error due to @
+    }
+
+    #[test]
+    fn test_empty_input() {
+        let mut lox = LoxTokenizer::default();
+        let input = "";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_whitespace_only() {
+        let mut lox = LoxTokenizer::default();
+        let input = "   \t\n\r   ";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::Eof, "".to_string(), None, 2),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_complex_mixed_tokens() {
+        let mut lox = LoxTokenizer::default();
+        let input = "var x = \"hello\" + 42.5;\nif (x >= 10) {\n    print true;\n}";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::Var, "var".to_string(), None, 1),
+            Token::new(TokenType::Identifier, "x".to_string(), None, 1),
+            Token::new(TokenType::Equal, "=".to_string(), None, 1),
+            Token::new(TokenType::String, "\"hello\"".to_string(), Some("hello".to_string()), 1),
+            Token::new(TokenType::Plus, "+".to_string(), None, 1),
+            Token::new(TokenType::Number, "42.5".to_string(), Some("42.5".to_string()), 1),
+            Token::new(TokenType::Semicolon, ";".to_string(), None, 1),
+            Token::new(TokenType::If, "if".to_string(), None, 2),
+            Token::new(TokenType::LeftParen, "(".to_string(), None, 2),
+            Token::new(TokenType::Identifier, "x".to_string(), None, 2),
+            Token::new(TokenType::GreaterEqual, ">=".to_string(), None, 2),
+            Token::new(TokenType::Number, "10".to_string(), Some("10.0".to_string()), 2),
+            Token::new(TokenType::RightParen, ")".to_string(), None, 2),
+            Token::new(TokenType::LeftBrace, "{".to_string(), None, 2),
+            Token::new(TokenType::Print, "print".to_string(), None, 3),
+            Token::new(TokenType::True, "true".to_string(), None, 3),
+            Token::new(TokenType::Semicolon, ";".to_string(), None, 3),
+            Token::new(TokenType::RightBrace, "}".to_string(), None, 4),
+            Token::new(TokenType::Eof, "".to_string(), None, 4),
+        ];
+        assert_eq!(result, expected);
+        assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_single_character_identifiers() {
+        let mut lox = LoxTokenizer::default();
+        let input = "a _ A";
+        let result = tokenize(&mut lox, input);
+        let expected = vec![
+            Token::new(TokenType::Identifier, "a".to_string(), None, 1),
+            Token::new(TokenType::Identifier, "_".to_string(), None, 1),
+            Token::new(TokenType::Identifier, "A".to_string(), None, 1),
             Token::new(TokenType::Eof, "".to_string(), None, 1),
         ];
         assert_eq!(result, expected);
