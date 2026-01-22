@@ -9,6 +9,7 @@ mod expr;
 mod lox_interpreter;
 mod lox_parser;
 mod lox_tokenizer;
+mod stmt;
 mod token;
 mod token_types;
 
@@ -28,7 +29,7 @@ fn main() {
         process::exit(74);
     }
 
-    writeln!(io::stderr(), "Read file with content: {}", file_contents).unwrap();
+    writeln!(io::stderr(), "Read file with content: {} \n\n", file_contents).unwrap();
 
     match command.as_str() {
         "tokenize" => {
@@ -51,7 +52,7 @@ fn main() {
                 writeln!(io::stderr(), "{}", token).unwrap();
             }
             let mut parser = lox_parser::LoxParser::new(tokens);
-            let expr = parser.parse();
+            let expr = parser.parse_expression(); // Still use expression parsing for now
             if parser.has_error {
                 process::exit(65);
             }
@@ -67,7 +68,7 @@ fn main() {
                 writeln!(io::stderr(), "{}", token).unwrap();
             }
             let mut parser = lox_parser::LoxParser::new(tokens);
-            let expr = parser.parse();
+            let expr = parser.parse_expression(); // Use expression parsing
             if parser.has_error {
                 process::exit(65);
             }
@@ -77,6 +78,30 @@ fn main() {
             match interpreter.evaluate(&expr) {
                 Ok(value) => {
                     println!("{}", value);
+                }
+                Err(error) => {
+                    writeln!(io::stderr(), "{}", error).unwrap();
+                    process::exit(70);
+                }
+            }
+        }
+        "run" => {
+            let mut lox_tokenizer = LoxTokenizer::default();
+            let tokens = lox_tokenizer.tokenize(&file_contents);
+            if lox_tokenizer.had_error {
+                process::exit(65)
+            }
+            let mut parser = lox_parser::LoxParser::new(tokens);
+            let statements = parser.parse(); // Use statement-based parsing
+            if parser.has_error {
+                process::exit(65);
+            }
+            
+            // Create interpreter and execute statements
+            let interpreter = Interpreter::new();
+            match interpreter.interpret(&statements) {
+                Ok(()) => {
+                    // Successful execution - output was produced via print statements
                 }
                 Err(error) => {
                     writeln!(io::stderr(), "{}", error).unwrap();

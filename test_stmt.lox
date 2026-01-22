@@ -1,0 +1,13 @@
+print true != true;
+
+print "36
+10
+78
+";
+
+print "There should be an empty line above this.";
+
+(37 + 42 - 21) > (76 - 37) * 2;
+print !false;
+"baz" + "hello" + "quz" + "bar" == "bazhelloquzbar";
+print !false;

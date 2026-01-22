@@ -261,6 +261,7 @@
 
 use std::fmt;
 use crate::token_types::TokenType;
+use crate::stmt;
 
 /// LoxValue represents runtime values in the Lox interpreter.
 /// This enum captures all possible value types that can exist during execution.
@@ -332,6 +333,19 @@ impl Interpreter {
     pub fn evaluate(&self, expr: &crate::expr::ExprEnum) -> Result<LoxValue, RuntimeError> {
         // Use the visitor pattern to evaluate the expression
         expr.accept(self)
+    }
+
+    /// Interprets a list of statements
+    pub fn interpret(&self, statements: &[stmt::StmtEnum]) -> Result<(), RuntimeError> {
+        for statement in statements {
+            self.execute(statement)?;
+        }
+        Ok(())
+    }
+
+    /// Executes a single statement
+    fn execute(&self, stmt: &stmt::StmtEnum) -> Result<(), RuntimeError> {
+        stmt.accept(self)
     }
 
     /// Helper function: determines if a LoxValue is truthy
@@ -2167,5 +2181,99 @@ mod tests {
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
         assert!(msg.contains("Operands must be two numbers or two strings"));
+    }
+
+    // =========================================================================
+    // STATEMENT INTERPRETATION TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_interpret_print_statement() {
+        // print 42;
+        let interpreter = Interpreter::new();
+        
+        let print_stmt = stmt::StmtEnum::Print(stmt::PrintStmt {
+            expression: Box::new(make_literal(42.0)),
+        });
+        
+        let statements = vec![print_stmt];
+        let result = interpreter.interpret(&statements);
+        
+        // Should succeed (output goes to stdout, which we can't easily capture in unit tests)
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_interpret_expression_statement() {
+        // 1 + 2; (evaluates but no output)
+        let interpreter = Interpreter::new();
+        
+        let expr_stmt = stmt::StmtEnum::Expression(stmt::ExpressionStmt {
+            expression: Box::new(make_binary(make_literal(1.0), "+", make_literal(2.0))),
+        });
+        
+        let statements = vec![expr_stmt];
+        let result = interpreter.interpret(&statements);
+        
+        // Should succeed without errors
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_interpret_program() {
+        // print 1;
+        // print 2 + 3;
+        let interpreter = Interpreter::new();
+        
+        let stmt1 = stmt::StmtEnum::Print(stmt::PrintStmt {
+            expression: Box::new(make_literal(1.0)),
+        });
+        
+        let stmt2 = stmt::StmtEnum::Print(stmt::PrintStmt {
+            expression: Box::new(make_binary(make_literal(2.0), "+", make_literal(3.0))),
+        });
+        
+        let statements = vec![stmt1, stmt2];
+        let result = interpreter.interpret(&statements);
+        
+        // Should execute both statements successfully
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_interpret_error_propagation() {
+        // print "string" - 5; (should error: can't subtract number from string)
+        let interpreter = Interpreter::new();
+        
+        let print_stmt = stmt::StmtEnum::Print(stmt::PrintStmt {
+            expression: Box::new(make_binary(make_literal("hello".to_string()), "-", make_literal(5.0))),
+        });
+        
+        let statements = vec![print_stmt];
+        let result = interpreter.interpret(&statements);
+        
+        // Should propagate the runtime error
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("Operands must be numbers"));
+    }
+}
+
+// =============================================================================
+// STATEMENT VISITOR IMPLEMENTATION
+// =============================================================================
+
+impl stmt::Visitor<Result<(), RuntimeError>> for Interpreter {
+    fn visit_expression_stmt(&self, stmt: &stmt::ExpressionStmt) -> Result<(), RuntimeError> {
+        // Evaluate the expression and discard the result
+        self.evaluate(&stmt.expression)?;
+        Ok(())
+    }
+
+    fn visit_print_stmt(&self, stmt: &stmt::PrintStmt) -> Result<(), RuntimeError> {
+        // Evaluate the expression and print the result
+        let value = self.evaluate(&stmt.expression)?;
+        println!("{}", value);
+        Ok(())
     }
 }

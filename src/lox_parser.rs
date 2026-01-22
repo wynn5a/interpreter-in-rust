@@ -1,6 +1,7 @@
-use TokenType::{Bang, BangEqual, EqualEqual, False, Greater, GreaterEqual, Identifier, LeftParen, Less, LessEqual, Minus, Nil, Number, Plus, Slash, Star, True};
+use TokenType::{Bang, BangEqual, EqualEqual, False, Greater, GreaterEqual, Identifier, LeftParen, Less, LessEqual, Minus, Nil, Number, Plus, Semicolon, Slash, Star, True};
 use crate::expr::ExprEnum;
 use crate::expr::{Binary, Grouping, Literal, Unary};
+use crate::stmt::{ExpressionStmt, PrintStmt, StmtEnum};
 use crate::token::Token;
 use crate::token_types::TokenType;
 
@@ -30,12 +31,51 @@ impl LoxParser {
         }
     }
 
-    pub(crate) fn parse(&mut self) -> Box<ExprEnum> {
+    // Parse method for expressions (used by parse command)
+    pub(crate) fn parse_expression(&mut self) -> Box<ExprEnum> {
         let expr = self.expression();
         if self.has_error {
             return Box::new(ExprEnum::None);
         }
         expr
+    }
+
+    // New parse method that returns a list of statements
+    pub fn parse(&mut self) -> Vec<StmtEnum> {
+        let mut statements = Vec::new();
+        
+        while !self.is_at_end() {
+            statements.push(self.statement());
+        }
+        
+        statements
+    }
+
+    // Parse a single statement
+    fn statement(&mut self) -> StmtEnum {
+        if self.match_tokens(vec![TokenType::Print]) {
+            return self.print_statement();
+        }
+        
+        self.expression_statement()
+    }
+
+    // Parse print statement: "print" expression ";"
+    fn print_statement(&mut self) -> StmtEnum {
+        let value = self.expression();
+        self.consume(Semicolon, "Expect ';' after value.");
+        StmtEnum::Print(PrintStmt {
+            expression: value,
+        })
+    }
+
+    // Parse expression statement: expression ";"
+    fn expression_statement(&mut self) -> StmtEnum {
+        let expr = self.expression();
+        self.consume(Semicolon, "Expect ';' after expression.");
+        StmtEnum::Expression(ExpressionStmt {
+            expression: expr,
+        })
     }
 
     fn expression(&mut self) -> Box<ExprEnum> {
@@ -222,7 +262,7 @@ mod tests {
 
     fn parse_and_print(tokens: Vec<Token>) -> (String, bool) {
         let mut parser = LoxParser::new(tokens);
-        let expr = parser.parse();
+        let expr = parser.parse_expression();
         let ast_printer = crate::expr::AstPrinter {};
         (expr.accept(&ast_printer), parser.has_error)
     }
@@ -347,7 +387,112 @@ mod tests {
         assert_eq!(printed, "(== foo bar)");
         assert!(!has_error);
     }
+
+    // =========================================================================
+    // STATEMENT PARSING TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_parse_print_statement() {
+        let tokens = vec![
+            Token::new(TokenType::Print, "print".to_string(), None, 1),
+            Token::new(TokenType::Number, "42".to_string(), Some("42".to_string()), 1),
+            Token::new(Semicolon, ";".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        assert!(!parser.has_error);
+        assert_eq!(statements.len(), 1);
+        
+        match &statements[0] {
+            StmtEnum::Print(print_stmt) => {
+                // Verify it's a print statement with a literal 42
+                match print_stmt.expression.as_ref() {
+                    ExprEnum::Literal(_) => {
+                        // Success - we have a print statement with a literal
+                    }
+                    _ => panic!("Expected literal expression in print statement"),
+                }
+            }
+            _ => panic!("Expected print statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_expression_statement() {
+        let tokens = vec![
+            Token::new(TokenType::Number, "42".to_string(), Some("42".to_string()), 1),
+            Token::new(TokenType::Plus, "+".to_string(), None, 1),
+            Token::new(TokenType::Number, "1".to_string(), Some("1".to_string()), 1),
+            Token::new(Semicolon, ";".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        assert!(!parser.has_error);
+        assert_eq!(statements.len(), 1);
+        
+        match &statements[0] {
+            StmtEnum::Expression(expr_stmt) => {
+                // Verify it's an expression statement with a binary expression
+                match expr_stmt.expression.as_ref() {
+                    ExprEnum::Binary(_) => {
+                        // Success - we have an expression statement with binary expr
+                    }
+                    _ => panic!("Expected binary expression in expression statement"),
+                }
+            }
+            _ => panic!("Expected expression statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_multiple_statements() {
+        let tokens = vec![
+            // print 1;
+            Token::new(TokenType::Print, "print".to_string(), None, 1),
+            Token::new(TokenType::Number, "1".to_string(), Some("1".to_string()), 1),
+            Token::new(Semicolon, ";".to_string(), None, 1),
+            // print 2 + 3;
+            Token::new(TokenType::Print, "print".to_string(), None, 2),
+            Token::new(TokenType::Number, "2".to_string(), Some("2".to_string()), 2),
+            Token::new(TokenType::Plus, "+".to_string(), None, 2),
+            Token::new(TokenType::Number, "3".to_string(), Some("3".to_string()), 2),
+            Token::new(Semicolon, ";".to_string(), None, 2),
+            // 42;
+            Token::new(TokenType::Number, "42".to_string(), Some("42".to_string()), 3),
+            Token::new(Semicolon, ";".to_string(), None, 3),
+            Token::new(TokenType::Eof, "".to_string(), None, 3),
+        ];
+
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        assert!(!parser.has_error);
+        assert_eq!(statements.len(), 3);
+        
+        // First statement should be print
+        match &statements[0] {
+            StmtEnum::Print(_) => {}
+            _ => panic!("Expected first statement to be print"),
+        }
+        
+        // Second statement should be print
+        match &statements[1] {
+            StmtEnum::Print(_) => {}
+            _ => panic!("Expected second statement to be print"),
+        }
+        
+        // Third statement should be expression
+        match &statements[2] {
+            StmtEnum::Expression(_) => {}
+            _ => panic!("Expected third statement to be expression"),
+        }
+    }
 }
-
-
 
