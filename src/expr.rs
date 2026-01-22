@@ -2,6 +2,7 @@ use std::any::Any;
 use crate::token::Token;
 
 // Define the enum with variants for each type
+#[allow(dead_code)]
 pub enum ExprEnum {
     Binary(Binary),
     Grouping(Grouping),
@@ -35,6 +36,7 @@ pub(crate) struct Literal {
     pub(crate) value: Box<dyn Any>,
 }
 
+#[allow(dead_code)]
 pub(crate) struct Logical {
     pub(crate) left: Box<ExprEnum>,
     pub(crate) op: Token,

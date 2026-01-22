@@ -300,17 +300,18 @@ impl fmt::Display for LoxValue {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeError {
     pub message: String,
+    pub line: usize,
 }
 
 impl RuntimeError {
-    pub fn new(message: String) -> Self {
-        RuntimeError { message }
+    pub fn new(message: String, line: usize) -> Self {
+        RuntimeError { message, line }
     }
 }
 
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.message)
+        write!(f, "[line {}] {}", self.line, self.message)
     }
 }
 
@@ -344,18 +345,18 @@ impl Interpreter {
     }
 
     /// Helper function: checks if operand is a number
-    fn check_number_operand(_operator: &crate::token::Token, operand: &LoxValue) -> Result<(), RuntimeError> {
+    fn check_number_operand(operator: &crate::token::Token, operand: &LoxValue) -> Result<(), RuntimeError> {
         match operand {
             LoxValue::Number(_) => Ok(()),
-            _ => Err(RuntimeError::new("Operand must be a number.".to_string())),
+            _ => Err(RuntimeError::new("Operand must be a number.".to_string(), operator.line)),
         }
     }
 
     /// Helper function: checks if operands are numbers
-    fn check_number_operands(_operator: &crate::token::Token, left: &LoxValue, right: &LoxValue) -> Result<(), RuntimeError> {
+    fn check_number_operands(operator: &crate::token::Token, left: &LoxValue, right: &LoxValue) -> Result<(), RuntimeError> {
         match (left, right) {
             (LoxValue::Number(_), LoxValue::Number(_)) => Ok(()),
-            _ => Err(RuntimeError::new("Operands must be numbers.".to_string())),
+            _ => Err(RuntimeError::new("Operands must be numbers.".to_string(), operator.line)),
         }
     }
 }
@@ -379,7 +380,8 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
                         Ok(LoxValue::String(format!("{}{}", l, r)))
                     }
                     _ => Err(RuntimeError::new(
-                        "Operands must be two numbers or two strings.".to_string()
+                        "Operands must be two numbers or two strings.".to_string(),
+                        expr.op.line
                     )),
                 }
             }
@@ -441,7 +443,8 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
                 Ok(LoxValue::Boolean(left != right))
             }
             _ => Err(RuntimeError::new(
-                format!("Unknown binary operator: {}", expr.op.lexeme)
+                format!("Unknown binary operator: {}", expr.op.lexeme),
+                expr.op.line
             )),
         }
     }
@@ -486,7 +489,7 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
         }
         
         // Unsupported type
-        Err(RuntimeError::new("Unsupported literal type".to_string()))
+        Err(RuntimeError::new("Unsupported literal type".to_string(), 0))
     }
 
     fn visit_grouping(&self, expr: &crate::expr::Grouping) -> Result<LoxValue, RuntimeError> {
@@ -513,7 +516,8 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
                 Ok(LoxValue::Boolean(!is_truthy))
             }
             _ => Err(RuntimeError::new(
-                format!("Unknown unary operator: {}", expr.op.lexeme)
+                format!("Unknown unary operator: {}", expr.op.lexeme),
+                expr.op.line
             )),
         }
     }
@@ -543,7 +547,8 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
                 }
             }
             _ => Err(RuntimeError::new(
-                format!("Unknown logical operator: {}", expr.op.lexeme)
+                format!("Unknown logical operator: {}", expr.op.lexeme),
+                expr.op.line
             )),
         }
     }
@@ -738,17 +743,18 @@ mod tests {
 
     #[test]
     fn test_runtime_error_creation() {
-        // RuntimeError should contain an error message
-        let error = RuntimeError::new("Test error message".to_string());
+        // RuntimeError should contain an error message and line number
+        let error = RuntimeError::new("Test error message".to_string(), 1);
         assert_eq!(error.message, "Test error message");
+        assert_eq!(error.line, 1);
     }
 
     #[test]
     fn test_runtime_error_display() {
-        // RuntimeError should implement Display for nice error messages
-        let error = RuntimeError::new("Operand must be a number.".to_string());
+        // RuntimeError should implement Display with line number format
+        let error = RuntimeError::new("Operand must be a number.".to_string(), 1);
         let displayed = format!("{}", error);
-        assert!(displayed.contains("Operand must be a number."));
+        assert_eq!(displayed, "[line 1] Operand must be a number.");
     }
 
     // =========================================================================
