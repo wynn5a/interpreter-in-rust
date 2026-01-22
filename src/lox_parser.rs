@@ -121,8 +121,17 @@ impl LoxParser {
             }));
         }
 
-        // Handle number and string literals (with literal value)
-        if self.match_tokens(vec![Number, TokenType::String]) {
+        // Handle number literals (parse string to f64)
+        if self.match_tokens(vec![Number]) {
+            let literal_str = self.previous().literal.unwrap();
+            let num = literal_str.parse::<f64>().expect("Failed to parse number");
+            return Box::new(ExprEnum::Literal(Literal {
+                value: Box::new(num),
+            }));
+        }
+        
+        // Handle string literals (keep as string)
+        if self.match_tokens(vec![TokenType::String]) {
             return Box::new(ExprEnum::Literal(Literal {
                 value: Box::new(self.previous().literal.unwrap()),
             }));

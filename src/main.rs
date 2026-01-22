@@ -1,10 +1,12 @@
 use crate::expr::AstPrinter;
+use crate::lox_interpreter::Interpreter;
 use crate::lox_tokenizer::LoxTokenizer;
 use std::fs;
 use std::io::{self, Write};
 use std::{env, process};
 
 mod expr;
+mod lox_interpreter;
 mod lox_parser;
 mod lox_tokenizer;
 mod token;
@@ -69,7 +71,18 @@ fn main() {
             if parser.has_error {
                 process::exit(65);
             }
-            println!("{}", expr.accept(&AstPrinter {}));
+            
+            // Create interpreter and evaluate expression
+            let interpreter = Interpreter::new();
+            match interpreter.evaluate(&expr) {
+                Ok(value) => {
+                    println!("{}", value);
+                }
+                Err(error) => {
+                    writeln!(io::stderr(), "{}", error).unwrap();
+                    process::exit(70);
+                }
+            }
         }
         _ => {
             writeln!(io::stderr(), "Unknown command: {}", command).unwrap();

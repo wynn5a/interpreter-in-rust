@@ -6,6 +6,7 @@ pub enum ExprEnum {
     Binary(Binary),
     Grouping(Grouping),
     Literal(Literal),
+    Logical(Logical),
     Unary(Unary),
     None,
 }
@@ -17,6 +18,7 @@ impl ExprEnum {
             ExprEnum::Binary(expr) => visitor.visit_binary(expr),
             ExprEnum::Grouping(expr) => visitor.visit_grouping(expr),
             ExprEnum::Literal(expr) => visitor.visit_literal(expr),
+            ExprEnum::Logical(expr) => visitor.visit_logical(expr),
             ExprEnum::Unary(expr) => visitor.visit_unary(expr),
             ExprEnum::None => panic!("Invalid expression type"),
         }
@@ -33,6 +35,12 @@ pub(crate) struct Literal {
     pub(crate) value: Box<dyn Any>,
 }
 
+pub(crate) struct Logical {
+    pub(crate) left: Box<ExprEnum>,
+    pub(crate) op: Token,
+    pub(crate) right: Box<ExprEnum>,
+}
+
 pub(crate) struct Unary {
     pub(crate) op: Token,
     pub(crate) right: Box<ExprEnum>,
@@ -47,6 +55,7 @@ pub trait Visitor<T> {
     fn visit_binary(&self, expr: &Binary) -> T;
     fn visit_literal(&self, expr: &Literal) -> T;
     fn visit_grouping(&self, expr: &Grouping) -> T;
+    fn visit_logical(&self, expr: &Logical) -> T;
     fn visit_unary(&self, expr: &Unary) -> T;
 }
 
@@ -77,6 +86,10 @@ impl Visitor<String> for AstPrinter {
 
     fn visit_grouping(&self, expr: &Grouping) -> String {
         format!("(group {})", expr.expression.accept(self))
+    }
+
+    fn visit_logical(&self, expr: &Logical) -> String {
+        format!("({} {} {})", expr.op.lexeme, expr.left.accept(self), expr.right.accept(self))
     }
 
     fn visit_unary(&self, expr: &Unary) -> String {
