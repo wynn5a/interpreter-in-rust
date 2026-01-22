@@ -1,10 +1,12 @@
 use crate::expr::ExprEnum;
+use crate::token::Token;
 
 // Define the statement enum with variants for each statement type
 #[allow(dead_code)]
 pub enum StmtEnum {
     Expression(ExpressionStmt),
     Print(PrintStmt),
+    Var(VarStmt),
     None,
 }
 
@@ -14,6 +16,7 @@ impl StmtEnum {
         match self {
             StmtEnum::Expression(stmt) => visitor.visit_expression_stmt(stmt),
             StmtEnum::Print(stmt) => visitor.visit_print_stmt(stmt),
+            StmtEnum::Var(stmt) => visitor.visit_var_stmt(stmt),
             StmtEnum::None => panic!("Invalid statement type"),
         }
     }
@@ -29,12 +32,23 @@ pub(crate) struct PrintStmt {
     pub(crate) expression: Box<ExprEnum>,
 }
 
+// Variable declaration statement: declares a variable with optional initializer
+// Examples:
+//   var x = 10;      // with initializer
+//   var y;           // without initializer (defaults to nil)
+#[allow(dead_code)]
+pub(crate) struct VarStmt {
+    pub(crate) name: Token,
+    pub(crate) initializer: Option<Box<ExprEnum>>,
+}
+
 // Visitor trait for statements
 // Unlike expressions which return values, statements return a generic type T
 // (typically Result<(), String> for execution)
 pub trait Visitor<T> {
     fn visit_expression_stmt(&self, stmt: &ExpressionStmt) -> T;
     fn visit_print_stmt(&self, stmt: &PrintStmt) -> T;
+    fn visit_var_stmt(&self, stmt: &VarStmt) -> T;
 }
 
 #[cfg(test)]
@@ -60,6 +74,10 @@ mod tests {
                 ExprEnum::Literal(_) => "print-stmt".to_string(),
                 _ => "print-stmt".to_string(),
             }
+        }
+
+        fn visit_var_stmt(&self, _stmt: &VarStmt) -> String {
+            "var-stmt".to_string()
         }
     }
 
@@ -118,5 +136,266 @@ mod tests {
         let printer = StmtPrinter;
         let result = stmt.accept(&printer);
         assert_eq!(result, "print-stmt");
+    }
+
+    // =========================================================================
+    // PHASE 3: VARIABLE DECLARATION STATEMENT TESTS
+    // =========================================================================
+
+    // -------------------------------------------------------------------------
+    // Test 1: Create VarStmt with initializer
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_var_stmt_with_initializer_creation() {
+        let name_token = Token::new(TokenType::Identifier, "x".to_string(), None, 1);
+        let initializer = Box::new(ExprEnum::Literal(Literal {
+            value: Box::new(42.0),
+        }));
+
+        let stmt = StmtEnum::Var(VarStmt {
+            name: name_token.clone(),
+            initializer: Some(initializer),
+        });
+
+        // Verify structure
+        match stmt {
+            StmtEnum::Var(var_stmt) => {
+                assert_eq!(var_stmt.name.lexeme, "x");
+                assert!(var_stmt.initializer.is_some());
+            }
+            _ => panic!("Expected Var statement"),
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 2: Create VarStmt without initializer
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_var_stmt_without_initializer_creation() {
+        let name_token = Token::new(TokenType::Identifier, "y".to_string(), None, 1);
+
+        let stmt = StmtEnum::Var(VarStmt {
+            name: name_token.clone(),
+            initializer: None,
+        });
+
+        // Verify structure
+        match stmt {
+            StmtEnum::Var(var_stmt) => {
+                assert_eq!(var_stmt.name.lexeme, "y");
+                assert!(var_stmt.initializer.is_none());
+            }
+            _ => panic!("Expected Var statement"),
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 3: VarStmt with number literal initializer
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_var_stmt_number_initializer() {
+        let name_token = Token::new(TokenType::Identifier, "age".to_string(), None, 1);
+        let initializer = Box::new(ExprEnum::Literal(Literal {
+            value: Box::new(25.0),
+        }));
+
+        let stmt = StmtEnum::Var(VarStmt {
+            name: name_token,
+            initializer: Some(initializer),
+        });
+
+        let printer = StmtPrinter;
+        let result = stmt.accept(&printer);
+        assert_eq!(result, "var-stmt");
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 4: VarStmt with string literal initializer
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_var_stmt_string_initializer() {
+        let name_token = Token::new(TokenType::Identifier, "name".to_string(), None, 1);
+        let initializer = Box::new(ExprEnum::Literal(Literal {
+            value: Box::new("Alice".to_string()),
+        }));
+
+        let stmt = StmtEnum::Var(VarStmt {
+            name: name_token,
+            initializer: Some(initializer),
+        });
+
+        let printer = StmtPrinter;
+        let result = stmt.accept(&printer);
+        assert_eq!(result, "var-stmt");
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 5: VarStmt with boolean initializer
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_var_stmt_boolean_initializer() {
+        let name_token = Token::new(TokenType::Identifier, "flag".to_string(), None, 1);
+        let initializer = Box::new(ExprEnum::Literal(Literal {
+            value: Box::new(true),
+        }));
+
+        let stmt = StmtEnum::Var(VarStmt {
+            name: name_token,
+            initializer: Some(initializer),
+        });
+
+        let printer = StmtPrinter;
+        let result = stmt.accept(&printer);
+        assert_eq!(result, "var-stmt");
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 6: VarStmt with expression initializer (binary)
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_var_stmt_binary_expression_initializer() {
+        use crate::expr::Binary;
+
+        let name_token = Token::new(TokenType::Identifier, "sum".to_string(), None, 1);
+        
+        let left = Box::new(ExprEnum::Literal(Literal {
+            value: Box::new(10.0),
+        }));
+        let right = Box::new(ExprEnum::Literal(Literal {
+            value: Box::new(20.0),
+        }));
+        let op = Token::new(TokenType::Plus, "+".to_string(), None, 1);
+        
+        let initializer = Box::new(ExprEnum::Binary(Binary {
+            left,
+            op,
+            right,
+        }));
+
+        let stmt = StmtEnum::Var(VarStmt {
+            name: name_token,
+            initializer: Some(initializer),
+        });
+
+        let printer = StmtPrinter;
+        let result = stmt.accept(&printer);
+        assert_eq!(result, "var-stmt");
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 7: VarStmt without initializer visitor call
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_var_stmt_no_initializer() {
+        let name_token = Token::new(TokenType::Identifier, "empty".to_string(), None, 1);
+
+        let stmt = StmtEnum::Var(VarStmt {
+            name: name_token,
+            initializer: None,
+        });
+
+        let printer = StmtPrinter;
+        let result = stmt.accept(&printer);
+        assert_eq!(result, "var-stmt");
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 8: VarStmt with variable reference as initializer
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_var_stmt_variable_initializer() {
+        use crate::expr::Variable;
+
+        let name_token = Token::new(TokenType::Identifier, "copy".to_string(), None, 1);
+        let source_token = Token::new(TokenType::Identifier, "original".to_string(), None, 1);
+        
+        let initializer = Box::new(ExprEnum::Variable(Variable {
+            name: source_token,
+        }));
+
+        let stmt = StmtEnum::Var(VarStmt {
+            name: name_token,
+            initializer: Some(initializer),
+        });
+
+        let printer = StmtPrinter;
+        let result = stmt.accept(&printer);
+        assert_eq!(result, "var-stmt");
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 9: Multiple VarStmt with different names
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_multiple_var_stmts() {
+        let var_names = vec!["a", "b", "counter", "userName", "temp123"];
+
+        for name in var_names {
+            let name_token = Token::new(TokenType::Identifier, name.to_string(), None, 1);
+            let initializer = Box::new(ExprEnum::Literal(Literal {
+                value: Box::new(0.0),
+            }));
+
+            let stmt = StmtEnum::Var(VarStmt {
+                name: name_token.clone(),
+                initializer: Some(initializer),
+            });
+
+            match stmt {
+                StmtEnum::Var(var_stmt) => {
+                    assert_eq!(var_stmt.name.lexeme, name);
+                }
+                _ => panic!("Expected Var statement"),
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 10: VarStmt with complex nested expression initializer
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_var_stmt_complex_initializer() {
+        use crate::expr::{Binary, Grouping};
+
+        let name_token = Token::new(TokenType::Identifier, "result".to_string(), None, 1);
+        
+        // Expression: (1 + 2) * 3
+        let inner_left = Box::new(ExprEnum::Literal(Literal {
+            value: Box::new(1.0),
+        }));
+        let inner_right = Box::new(ExprEnum::Literal(Literal {
+            value: Box::new(2.0),
+        }));
+        let plus_op = Token::new(TokenType::Plus, "+".to_string(), None, 1);
+        
+        let inner_binary = Box::new(ExprEnum::Binary(Binary {
+            left: inner_left,
+            op: plus_op,
+            right: inner_right,
+        }));
+
+        let grouped = Box::new(ExprEnum::Grouping(Grouping {
+            expression: inner_binary,
+        }));
+
+        let three = Box::new(ExprEnum::Literal(Literal {
+            value: Box::new(3.0),
+        }));
+        let star_op = Token::new(TokenType::Star, "*".to_string(), None, 1);
+
+        let initializer = Box::new(ExprEnum::Binary(Binary {
+            left: grouped,
+            op: star_op,
+            right: three,
+        }));
+
+        let stmt = StmtEnum::Var(VarStmt {
+            name: name_token,
+            initializer: Some(initializer),
+        });
+
+        let printer = StmtPrinter;
+        let result = stmt.accept(&printer);
+        assert_eq!(result, "var-stmt");
     }
 }

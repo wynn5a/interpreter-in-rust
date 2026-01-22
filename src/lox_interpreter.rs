@@ -259,9 +259,12 @@
 // BEGIN IMPLEMENTATION BELOW
 // =============================================================================
 
+use std::cell::RefCell;
 use std::fmt;
-use crate::token_types::TokenType;
+
+use crate::environment::Environment;
 use crate::stmt;
+use crate::token_types::TokenType;
 
 /// LoxValue represents runtime values in the Lox interpreter.
 /// This enum captures all possible value types that can exist during execution.
@@ -316,26 +319,25 @@ impl fmt::Display for RuntimeError {
     }
 }
 
-/// Interpreter evaluates Lox expressions
+/// Interpreter evaluates Lox expressions and executes statements.
 pub struct Interpreter {
-    // Will be used for environment/state when implementing variables
-    _phantom: std::marker::PhantomData<()>,
+    environment: RefCell<Environment>,
 }
 
 impl Interpreter {
+    /// Creates a new interpreter with an empty environment.
     pub fn new() -> Self {
         Interpreter {
-            _phantom: std::marker::PhantomData,
+            environment: RefCell::new(Environment::new()),
         }
     }
 
-    /// Evaluates an expression and returns the resulting value or error
+    /// Evaluates an expression and returns the resulting value or error.
     pub fn evaluate(&self, expr: &crate::expr::ExprEnum) -> Result<LoxValue, RuntimeError> {
-        // Use the visitor pattern to evaluate the expression
         expr.accept(self)
     }
 
-    /// Interprets a list of statements
+    /// Interprets a list of statements, executing them in order.
     pub fn interpret(&self, statements: &[stmt::StmtEnum]) -> Result<(), RuntimeError> {
         for statement in statements {
             self.execute(statement)?;
@@ -343,22 +345,16 @@ impl Interpreter {
         Ok(())
     }
 
-    /// Executes a single statement
     fn execute(&self, stmt: &stmt::StmtEnum) -> Result<(), RuntimeError> {
         stmt.accept(self)
     }
 
-    /// Helper function: determines if a LoxValue is truthy
-    /// In Lox: false and nil are falsey, everything else is truthy
+    /// Determines if a LoxValue is truthy.
+    /// In Lox: false and nil are falsey, everything else is truthy.
     fn is_truthy(value: &LoxValue) -> bool {
-        match value {
-            LoxValue::Nil => false,
-            LoxValue::Boolean(b) => *b,
-            _ => true, // Numbers, strings, etc. are all truthy
-        }
+        !matches!(value, LoxValue::Nil | LoxValue::Boolean(false))
     }
 
-    /// Helper function: checks if operand is a number
     fn check_number_operand(operator: &crate::token::Token, operand: &LoxValue) -> Result<(), RuntimeError> {
         match operand {
             LoxValue::Number(_) => Ok(()),
@@ -366,7 +362,6 @@ impl Interpreter {
         }
     }
 
-    /// Helper function: checks if operands are numbers
     fn check_number_operands(operator: &crate::token::Token, left: &LoxValue, right: &LoxValue) -> Result<(), RuntimeError> {
         match (left, right) {
             (LoxValue::Number(_), LoxValue::Number(_)) => Ok(()),
@@ -375,87 +370,42 @@ impl Interpreter {
     }
 }
 
-// Implement the Visitor trait for Interpreter
 impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
     fn visit_binary(&self, expr: &crate::expr::Binary) -> Result<LoxValue, RuntimeError> {
-        // Evaluate both operands
         let left = self.evaluate(&expr.left)?;
         let right = self.evaluate(&expr.right)?;
         
-        // Handle each operator
         match expr.op.token_type {
-            TokenType::Plus => {
-                // Addition: Number + Number OR String + String
-                match (&left, &right) {
-                    (LoxValue::Number(l), LoxValue::Number(r)) => {
-                        Ok(LoxValue::Number(l + r))
-                    }
-                    (LoxValue::String(l), LoxValue::String(r)) => {
-                        Ok(LoxValue::String(format!("{}{}", l, r)))
-                    }
-                    _ => Err(RuntimeError::new(
-                        "Operands must be two numbers or two strings.".to_string(),
-                        expr.op.line
-                    )),
-                }
-            }
-            TokenType::Minus => {
+            TokenType::Plus => match (&left, &right) {
+                (LoxValue::Number(l), LoxValue::Number(r)) => Ok(LoxValue::Number(l + r)),
+                (LoxValue::String(l), LoxValue::String(r)) => Ok(LoxValue::String(format!("{}{}", l, r))),
+                _ => Err(RuntimeError::new(
+                    "Operands must be two numbers or two strings.".to_string(),
+                    expr.op.line
+                )),
+            },
+            TokenType::Minus | TokenType::Star | TokenType::Slash |
+            TokenType::Greater | TokenType::GreaterEqual | 
+            TokenType::Less | TokenType::LessEqual => {
                 Self::check_number_operands(&expr.op, &left, &right)?;
-                match (&left, &right) {
-                    (LoxValue::Number(l), LoxValue::Number(r)) => Ok(LoxValue::Number(l - r)),
-                    _ => unreachable!(), // Checked by helper
+                if let (LoxValue::Number(l), LoxValue::Number(r)) = (&left, &right) {
+                    let result = match expr.op.token_type {
+                        TokenType::Minus => LoxValue::Number(l - r),
+                        TokenType::Star => LoxValue::Number(l * r),
+                        TokenType::Slash => LoxValue::Number(l / r),
+                        TokenType::Greater => LoxValue::Boolean(l > r),
+                        TokenType::GreaterEqual => LoxValue::Boolean(l >= r),
+                        TokenType::Less => LoxValue::Boolean(l < r),
+                        TokenType::LessEqual => LoxValue::Boolean(l <= r),
+                        _ => unreachable!(),
+                    };
+                    Ok(result)
+                } else {
+                    unreachable!()
                 }
             }
-            TokenType::Star => {
-                Self::check_number_operands(&expr.op, &left, &right)?;
-                match (&left, &right) {
-                    (LoxValue::Number(l), LoxValue::Number(r)) => Ok(LoxValue::Number(l * r)),
-                    _ => unreachable!(), // Checked by helper
-                }
-            }
-            TokenType::Slash => {
-                 Self::check_number_operands(&expr.op, &left, &right)?;
-                 match (&left, &right) {
-                    (LoxValue::Number(l), LoxValue::Number(r)) => Ok(LoxValue::Number(l / r)),
-                     _ => unreachable!(), // Checked by helper
-                 }
-            }
-            TokenType::Greater => {
-                 Self::check_number_operands(&expr.op, &left, &right)?;
-                 match (&left, &right) {
-                    (LoxValue::Number(l), LoxValue::Number(r)) => Ok(LoxValue::Boolean(l > r)),
-                     _ => unreachable!(), // Checked by helper
-                 }
-            }
-            TokenType::GreaterEqual => {
-                 Self::check_number_operands(&expr.op, &left, &right)?;
-                 match (&left, &right) {
-                    (LoxValue::Number(l), LoxValue::Number(r)) => Ok(LoxValue::Boolean(l >= r)),
-                     _ => unreachable!(), // Checked by helper
-                 }
-            }
-            TokenType::Less => {
-                 Self::check_number_operands(&expr.op, &left, &right)?;
-                 match (&left, &right) {
-                    (LoxValue::Number(l), LoxValue::Number(r)) => Ok(LoxValue::Boolean(l < r)),
-                     _ => unreachable!(), // Checked by helper
-                 }
-            }
-            TokenType::LessEqual => {
-                 Self::check_number_operands(&expr.op, &left, &right)?;
-                 match (&left, &right) {
-                    (LoxValue::Number(l), LoxValue::Number(r)) => Ok(LoxValue::Boolean(l <= r)),
-                     _ => unreachable!(), // Checked by helper
-                 }
-            }
-            TokenType::EqualEqual => {
-                // Equality: works on any types
-                Ok(LoxValue::Boolean(left == right))
-            }
-            TokenType::BangEqual => {
-                // Inequality: works on any types
-                Ok(LoxValue::Boolean(left != right))
-            }
+            TokenType::EqualEqual => Ok(LoxValue::Boolean(left == right)),
+            TokenType::BangEqual => Ok(LoxValue::Boolean(left != right)),
             _ => Err(RuntimeError::new(
                 format!("Unknown binary operator: {}", expr.op.lexeme),
                 expr.op.line
@@ -466,69 +416,48 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
     fn visit_literal(&self, expr: &crate::expr::Literal) -> Result<LoxValue, RuntimeError> {
         let value = &expr.value;
         
-        // Try downcasting to each supported type
-        // f64 - primary number type
         if let Some(&num) = value.downcast_ref::<f64>() {
             return Ok(LoxValue::Number(num));
         }
-        
-        // i32 - convert to f64
         if let Some(&num) = value.downcast_ref::<i32>() {
             return Ok(LoxValue::Number(num as f64));
         }
-        
-        // i64 - convert to f64
         if let Some(&num) = value.downcast_ref::<i64>() {
             return Ok(LoxValue::Number(num as f64));
         }
-        
-        // String - owned string
         if let Some(s) = value.downcast_ref::<String>() {
             return Ok(LoxValue::String(s.clone()));
         }
-        
-        // &str - string slice
         if let Some(&s) = value.downcast_ref::<&str>() {
             return Ok(LoxValue::String(s.to_string()));
         }
-        
-        // bool - boolean
         if let Some(&b) = value.downcast_ref::<bool>() {
             return Ok(LoxValue::Boolean(b));
         }
-        
-        // () - unit type represents nil
         if value.downcast_ref::<()>().is_some() {
             return Ok(LoxValue::Nil);
         }
         
-        // Unsupported type
         Err(RuntimeError::new("Unsupported literal type".to_string(), 0))
     }
 
     fn visit_grouping(&self, expr: &crate::expr::Grouping) -> Result<LoxValue, RuntimeError> {
-        // Grouping simply evaluates the inner expression
         self.evaluate(&expr.expression)
     }
 
     fn visit_unary(&self, expr: &crate::expr::Unary) -> Result<LoxValue, RuntimeError> {
-        // First, evaluate the operand
         let right = self.evaluate(&expr.right)?;
         
-        // Handle the operator
         match expr.op.token_type {
             TokenType::Minus => {
                 Self::check_number_operand(&expr.op, &right)?;
-                match right {
-                    LoxValue::Number(n) => Ok(LoxValue::Number(-n)),
-                    _ => unreachable!(), // Checked by helper
+                if let LoxValue::Number(n) = right {
+                    Ok(LoxValue::Number(-n))
+                } else {
+                    unreachable!()
                 }
             }
-            TokenType::Bang => {
-                // Logical not: works on any value
-                let is_truthy = Self::is_truthy(&right);
-                Ok(LoxValue::Boolean(!is_truthy))
-            }
+            TokenType::Bang => Ok(LoxValue::Boolean(!Self::is_truthy(&right))),
             _ => Err(RuntimeError::new(
                 format!("Unknown unary operator: {}", expr.op.lexeme),
                 expr.op.line
@@ -536,34 +465,27 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
         }
     }
 
+    fn visit_variable(&self, expr: &crate::expr::Variable) -> Result<LoxValue, RuntimeError> {
+        self.environment.borrow().get(&expr.name.lexeme)
+            .map_err(|msg| RuntimeError::new(msg, expr.name.line))
+    }
+
     fn visit_logical(&self, expr: &crate::expr::Logical) -> Result<LoxValue, RuntimeError> {
-        // Evaluate the left operand first
         let left = self.evaluate(&expr.left)?;
         
-        // Handle short-circuit evaluation based on operator
-        match expr.op.token_type {
-            TokenType::Or => {
-                // If left is truthy, return left (short-circuit)
-                // Otherwise, evaluate and return right
-                if Self::is_truthy(&left) {
-                    Ok(left)
-                } else {
-                    self.evaluate(&expr.right)
-                }
-            }
-            TokenType::And => {
-                // If left is falsey, return left (short-circuit)
-                // Otherwise, evaluate and return right
-                if !Self::is_truthy(&left) {
-                    Ok(left)
-                } else {
-                    self.evaluate(&expr.right)
-                }
-            }
-            _ => Err(RuntimeError::new(
+        let should_short_circuit = match expr.op.token_type {
+            TokenType::Or => Self::is_truthy(&left),
+            TokenType::And => !Self::is_truthy(&left),
+            _ => return Err(RuntimeError::new(
                 format!("Unknown logical operator: {}", expr.op.lexeme),
                 expr.op.line
             )),
+        };
+
+        if should_short_circuit {
+            Ok(left)
+        } else {
+            self.evaluate(&expr.right)
         }
     }
 }
@@ -2257,6 +2179,1093 @@ mod tests {
         let msg = result.unwrap_err().to_string();
         assert!(msg.contains("Operands must be numbers"));
     }
+
+    // =========================================================================
+    // PHASE 6: INTERPRETER - VARIABLE EVALUATION TESTS
+    // =========================================================================
+
+    // Helper to create a Variable expression
+    fn make_variable(name: &str) -> crate::expr::ExprEnum {
+        use crate::token::Token;
+        use crate::token_types::TokenType;
+        crate::expr::ExprEnum::Variable(crate::expr::Variable {
+            name: Token::new(TokenType::Identifier, name.to_string(), None, 1),
+        })
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 1: Evaluate defined variable
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_eval_defined_variable() {
+        let interpreter = Interpreter::new();
+        
+        // Manually define a variable in the environment
+        interpreter.environment.borrow_mut().define(
+            "x".to_string(),
+            LoxValue::Number(42.0)
+        );
+        
+        // Evaluate: x
+        let expr = make_variable("x");
+        let result = interpreter.evaluate(&expr);
+        
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), LoxValue::Number(42.0));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 2: Evaluate undefined variable should error
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_eval_undefined_variable() {
+        let interpreter = Interpreter::new();
+        
+        // Try to evaluate undefined variable: undefined_var
+        let expr = make_variable("undefined_var");
+        let result = interpreter.evaluate(&expr);
+        
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.message.contains("Undefined"));
+        assert!(error.message.contains("undefined_var"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 3: Evaluate variable in binary expression
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_eval_variable_in_expression() {
+        let interpreter = Interpreter::new();
+        
+        // Define: a = 10
+        interpreter.environment.borrow_mut().define(
+            "a".to_string(),
+            LoxValue::Number(10.0)
+        );
+        
+        // Evaluate: a + 1
+        let expr = make_binary(
+            make_variable("a"),
+            "+",
+            make_literal(1.0)
+        );
+        
+        let result = interpreter.evaluate(&expr);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), LoxValue::Number(11.0));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 4: Evaluate multiple variables in expression
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_eval_multiple_variables_in_expression() {
+        let interpreter = Interpreter::new();
+        
+        // Define: x = 5, y = 3
+        interpreter.environment.borrow_mut().define(
+            "x".to_string(),
+            LoxValue::Number(5.0)
+        );
+        interpreter.environment.borrow_mut().define(
+            "y".to_string(),
+            LoxValue::Number(3.0)
+        );
+        
+        // Evaluate: x + y
+        let expr = make_binary(
+            make_variable("x"),
+            "+",
+            make_variable("y")
+        );
+        
+        let result = interpreter.evaluate(&expr);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), LoxValue::Number(8.0));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 5: Evaluate string variable
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_eval_string_variable() {
+        let interpreter = Interpreter::new();
+        
+        // Define: message = "Hello"
+        interpreter.environment.borrow_mut().define(
+            "message".to_string(),
+            LoxValue::String("Hello".to_string())
+        );
+        
+        // Evaluate: message
+        let expr = make_variable("message");
+        let result = interpreter.evaluate(&expr);
+        
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), LoxValue::String("Hello".to_string()));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 6: Evaluate boolean variable
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_eval_boolean_variable() {
+        let interpreter = Interpreter::new();
+        
+        // Define: flag = true
+        interpreter.environment.borrow_mut().define(
+            "flag".to_string(),
+            LoxValue::Boolean(true)
+        );
+        
+        // Evaluate: flag
+        let expr = make_variable("flag");
+        let result = interpreter.evaluate(&expr);
+        
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), LoxValue::Boolean(true));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 7: Evaluate nil variable
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_eval_nil_variable() {
+        let interpreter = Interpreter::new();
+        
+        // Define: empty = nil
+        interpreter.environment.borrow_mut().define(
+            "empty".to_string(),
+            LoxValue::Nil
+        );
+        
+        // Evaluate: empty
+        let expr = make_variable("empty");
+        let result = interpreter.evaluate(&expr);
+        
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), LoxValue::Nil);
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 8: Evaluate variable in comparison
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_eval_variable_in_comparison() {
+        let interpreter = Interpreter::new();
+        
+        // Define: age = 25
+        interpreter.environment.borrow_mut().define(
+            "age".to_string(),
+            LoxValue::Number(25.0)
+        );
+        
+        // Evaluate: age > 18
+        let expr = make_binary(
+            make_variable("age"),
+            ">",
+            make_literal(18.0)
+        );
+        
+        let result = interpreter.evaluate(&expr);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), LoxValue::Boolean(true));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 9: Evaluate variable in unary expression
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_eval_variable_in_unary() {
+        let interpreter = Interpreter::new();
+        
+        // Define: x = 10
+        interpreter.environment.borrow_mut().define(
+            "x".to_string(),
+            LoxValue::Number(10.0)
+        );
+        
+        // Evaluate: -x
+        let expr = make_unary("-", make_variable("x"));
+        
+        let result = interpreter.evaluate(&expr);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), LoxValue::Number(-10.0));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 10: Evaluate complex expression with variables
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_eval_complex_expression_with_variables() {
+        let interpreter = Interpreter::new();
+        
+        // Define: a = 2, b = 3, c = 4
+        interpreter.environment.borrow_mut().define(
+            "a".to_string(),
+            LoxValue::Number(2.0)
+        );
+        interpreter.environment.borrow_mut().define(
+            "b".to_string(),
+            LoxValue::Number(3.0)
+        );
+        interpreter.environment.borrow_mut().define(
+            "c".to_string(),
+            LoxValue::Number(4.0)
+        );
+        
+        // Evaluate: (a + b) * c = (2 + 3) * 4 = 20
+        let inner = make_binary(
+            make_variable("a"),
+            "+",
+            make_variable("b")
+        );
+        let grouped = crate::expr::ExprEnum::Grouping(crate::expr::Grouping {
+            expression: Box::new(inner),
+        });
+        let expr = make_binary(
+            grouped,
+            "*",
+            make_variable("c")
+        );
+        
+        let result = interpreter.evaluate(&expr);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), LoxValue::Number(20.0));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 11: Error when one variable is undefined
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_eval_partial_undefined_variables() {
+        let interpreter = Interpreter::new();
+        
+        // Define only x, not y
+        interpreter.environment.borrow_mut().define(
+            "x".to_string(),
+            LoxValue::Number(5.0)
+        );
+        
+        // Try to evaluate: x + y (y is undefined)
+        let expr = make_binary(
+            make_variable("x"),
+            "+",
+            make_variable("y")
+        );
+        
+        let result = interpreter.evaluate(&expr);
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.message.contains("Undefined"));
+        assert!(error.message.contains("y"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 12: Variable names are case-sensitive
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_eval_variable_case_sensitive() {
+        let interpreter = Interpreter::new();
+        
+        // Define: variable = 1, Variable = 2
+        interpreter.environment.borrow_mut().define(
+            "variable".to_string(),
+            LoxValue::Number(1.0)
+        );
+        interpreter.environment.borrow_mut().define(
+            "Variable".to_string(),
+            LoxValue::Number(2.0)
+        );
+        
+        // Evaluate: variable
+        let expr1 = make_variable("variable");
+        let result1 = interpreter.evaluate(&expr1);
+        assert_eq!(result1.unwrap(), LoxValue::Number(1.0));
+        
+        // Evaluate: Variable
+        let expr2 = make_variable("Variable");
+        let result2 = interpreter.evaluate(&expr2);
+        assert_eq!(result2.unwrap(), LoxValue::Number(2.0));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 13: Evaluate string concatenation with variables
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_eval_string_concatenation_with_variables() {
+        let interpreter = Interpreter::new();
+        
+        // Define: first = "Hello", last = "World"
+        interpreter.environment.borrow_mut().define(
+            "first".to_string(),
+            LoxValue::String("Hello".to_string())
+        );
+        interpreter.environment.borrow_mut().define(
+            "last".to_string(),
+            LoxValue::String("World".to_string())
+        );
+        
+        // Evaluate: first + last
+        let expr = make_binary(
+            make_variable("first"),
+            "+",
+            make_variable("last")
+        );
+        
+        let result = interpreter.evaluate(&expr);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), LoxValue::String("HelloWorld".to_string()));
+    }
+
+    // =========================================================================
+    // PHASE 7: INTERPRETER - VARIABLE DECLARATION EXECUTION TESTS
+    // =========================================================================
+
+    // Helper to create a VarStmt
+    fn make_var_stmt(name: &str, initializer: Option<crate::expr::ExprEnum>) -> stmt::StmtEnum {
+        use crate::token::Token;
+        use crate::token_types::TokenType;
+        stmt::StmtEnum::Var(stmt::VarStmt {
+            name: Token::new(TokenType::Identifier, name.to_string(), None, 1),
+            initializer: initializer.map(Box::new),
+        })
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 1: Execute var declaration with number initializer
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_execute_var_with_number() {
+        let interpreter = Interpreter::new();
+        
+        // Execute: var x = 42;
+        let var_stmt = make_var_stmt("x", Some(make_literal(42.0)));
+        let result = interpreter.execute(&var_stmt);
+        
+        assert!(result.is_ok());
+        
+        // Verify variable was defined in environment
+        let value = interpreter.environment.borrow().get("x");
+        assert!(value.is_ok());
+        assert_eq!(value.unwrap(), LoxValue::Number(42.0));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 2: Execute var declaration without initializer (defaults to nil)
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_execute_var_without_initializer() {
+        let interpreter = Interpreter::new();
+        
+        // Execute: var y;
+        let var_stmt = make_var_stmt("y", None);
+        let result = interpreter.execute(&var_stmt);
+        
+        assert!(result.is_ok());
+        
+        // Verify variable was defined as nil
+        let value = interpreter.environment.borrow().get("y");
+        assert!(value.is_ok());
+        assert_eq!(value.unwrap(), LoxValue::Nil);
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 3: Execute var with string initializer
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_execute_var_with_string() {
+        let interpreter = Interpreter::new();
+        
+        // Execute: var message = "Hello";
+        let var_stmt = make_var_stmt("message", Some(make_literal("Hello".to_string())));
+        let result = interpreter.execute(&var_stmt);
+        
+        assert!(result.is_ok());
+        
+        let value = interpreter.environment.borrow().get("message");
+        assert_eq!(value.unwrap(), LoxValue::String("Hello".to_string()));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 4: Execute var with boolean initializer
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_execute_var_with_boolean() {
+        let interpreter = Interpreter::new();
+        
+        // Execute: var flag = true;
+        let var_stmt = make_var_stmt("flag", Some(make_literal(true)));
+        let result = interpreter.execute(&var_stmt);
+        
+        assert!(result.is_ok());
+        
+        let value = interpreter.environment.borrow().get("flag");
+        assert_eq!(value.unwrap(), LoxValue::Boolean(true));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 5: Execute var with expression initializer
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_execute_var_with_expression() {
+        let interpreter = Interpreter::new();
+        
+        // Execute: var sum = 10 + 5;
+        let expr = make_binary(make_literal(10.0), "+", make_literal(5.0));
+        let var_stmt = make_var_stmt("sum", Some(expr));
+        let result = interpreter.execute(&var_stmt);
+        
+        assert!(result.is_ok());
+        
+        let value = interpreter.environment.borrow().get("sum");
+        assert_eq!(value.unwrap(), LoxValue::Number(15.0));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 6: Execute var with complex expression initializer
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_execute_var_with_complex_expression() {
+        let interpreter = Interpreter::new();
+        
+        // Execute: var result = (2 + 3) * 4;
+        let inner = make_binary(make_literal(2.0), "+", make_literal(3.0));
+        let grouped = crate::expr::ExprEnum::Grouping(crate::expr::Grouping {
+            expression: Box::new(inner),
+        });
+        let expr = make_binary(grouped, "*", make_literal(4.0));
+        let var_stmt = make_var_stmt("result", Some(expr));
+        
+        let result = interpreter.execute(&var_stmt);
+        assert!(result.is_ok());
+        
+        let value = interpreter.environment.borrow().get("result");
+        assert_eq!(value.unwrap(), LoxValue::Number(20.0));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 7: Execute multiple var declarations
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_execute_multiple_var_declarations() {
+        let interpreter = Interpreter::new();
+        
+        // Execute: var a = 1; var b = 2; var c = 3;
+        let stmt1 = make_var_stmt("a", Some(make_literal(1.0)));
+        let stmt2 = make_var_stmt("b", Some(make_literal(2.0)));
+        let stmt3 = make_var_stmt("c", Some(make_literal(3.0)));
+        
+        assert!(interpreter.execute(&stmt1).is_ok());
+        assert!(interpreter.execute(&stmt2).is_ok());
+        assert!(interpreter.execute(&stmt3).is_ok());
+        
+        // All three should be accessible
+        assert_eq!(
+            interpreter.environment.borrow().get("a").unwrap(),
+            LoxValue::Number(1.0)
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("b").unwrap(),
+            LoxValue::Number(2.0)
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("c").unwrap(),
+            LoxValue::Number(3.0)
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 8: Variable redefinition (should be allowed - Scheme-style)
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_execute_var_redefinition() {
+        let interpreter = Interpreter::new();
+        
+        // Execute: var x = "before";
+        let stmt1 = make_var_stmt("x", Some(make_literal("before".to_string())));
+        assert!(interpreter.execute(&stmt1).is_ok());
+        
+        // Execute: var x = "after";
+        let stmt2 = make_var_stmt("x", Some(make_literal("after".to_string())));
+        assert!(interpreter.execute(&stmt2).is_ok());
+        
+        // Should have the new value
+        let value = interpreter.environment.borrow().get("x");
+        assert_eq!(value.unwrap(), LoxValue::String("after".to_string()));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 9: Declare var then use it in expression
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_execute_var_then_use() {
+        let interpreter = Interpreter::new();
+        
+        // Execute: var x = 10;
+        let var_stmt = make_var_stmt("x", Some(make_literal(10.0)));
+        assert!(interpreter.execute(&var_stmt).is_ok());
+        
+        // Now evaluate: x + 5
+        let expr = make_binary(make_variable("x"), "+", make_literal(5.0));
+        let result = interpreter.evaluate(&expr);
+        
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), LoxValue::Number(15.0));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 10: Declare var using another variable
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_execute_var_with_variable_initializer() {
+        let interpreter = Interpreter::new();
+        
+        // Execute: var original = 42;
+        let stmt1 = make_var_stmt("original", Some(make_literal(42.0)));
+        assert!(interpreter.execute(&stmt1).is_ok());
+        
+        // Execute: var copy = original;
+        let stmt2 = make_var_stmt("copy", Some(make_variable("original")));
+        assert!(interpreter.execute(&stmt2).is_ok());
+        
+        // Both should have the same value
+        let original_value = interpreter.environment.borrow().get("original").unwrap();
+        let copy_value = interpreter.environment.borrow().get("copy").unwrap();
+        assert_eq!(original_value, LoxValue::Number(42.0));
+        assert_eq!(copy_value, LoxValue::Number(42.0));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 11: Error when initializer references undefined variable
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_execute_var_with_undefined_initializer() {
+        let interpreter = Interpreter::new();
+        
+        // Execute: var x = undefined_var; (should error)
+        let var_stmt = make_var_stmt("x", Some(make_variable("undefined_var")));
+        let result = interpreter.execute(&var_stmt);
+        
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.message.contains("Undefined"));
+        assert!(error.message.contains("undefined_var"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 12: Error when initializer has runtime error
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_execute_var_with_error_in_initializer() {
+        let interpreter = Interpreter::new();
+        
+        // Execute: var x = "string" - 5; (should error: can't subtract)
+        let expr = make_binary(make_literal("string".to_string()), "-", make_literal(5.0));
+        let var_stmt = make_var_stmt("x", Some(expr));
+        let result = interpreter.execute(&var_stmt);
+        
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.message.contains("Operands must be numbers"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 13: Execute var with different value types
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_execute_var_different_types() {
+        let interpreter = Interpreter::new();
+        
+        // Number
+        let stmt1 = make_var_stmt("num", Some(make_literal(3.14)));
+        assert!(interpreter.execute(&stmt1).is_ok());
+        
+        // String
+        let stmt2 = make_var_stmt("str", Some(make_literal("test".to_string())));
+        assert!(interpreter.execute(&stmt2).is_ok());
+        
+        // Boolean
+        let stmt3 = make_var_stmt("bool", Some(make_literal(false)));
+        assert!(interpreter.execute(&stmt3).is_ok());
+        
+        // Nil (explicit)
+        let stmt4 = make_var_stmt("nothing", None);
+        assert!(interpreter.execute(&stmt4).is_ok());
+        
+        // Verify all are accessible
+        assert_eq!(
+            interpreter.environment.borrow().get("num").unwrap(),
+            LoxValue::Number(3.14)
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("str").unwrap(),
+            LoxValue::String("test".to_string())
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("bool").unwrap(),
+            LoxValue::Boolean(false)
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("nothing").unwrap(),
+            LoxValue::Nil
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 14: Interpret program with var declarations
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_interpret_program_with_vars() {
+        let interpreter = Interpreter::new();
+        
+        // Program:
+        // var x = 10;
+        // var y = 20;
+        // var sum = x + y;
+        let statements = vec![
+            make_var_stmt("x", Some(make_literal(10.0))),
+            make_var_stmt("y", Some(make_literal(20.0))),
+            make_var_stmt("sum", Some(make_binary(
+                make_variable("x"),
+                "+",
+                make_variable("y")
+            ))),
+        ];
+        
+        let result = interpreter.interpret(&statements);
+        assert!(result.is_ok());
+        
+        // Verify final result
+        let sum_value = interpreter.environment.borrow().get("sum").unwrap();
+        assert_eq!(sum_value, LoxValue::Number(30.0));
+    }
+
+    // =========================================================================
+    // PHASE 8: INTEGRATION TESTS - COMPLETE GLOBAL VARIABLES FLOW
+    // =========================================================================
+    // These tests verify the complete pipeline: tokenize → parse → execute
+
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::lox_parser::LoxParser;
+
+    // -------------------------------------------------------------------------
+    // Test 1: Complete flow - simple var declaration
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_integration_simple_var_declaration() {
+        // Source: var x = 42;
+        let source = "var x = 42;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        
+        assert!(result.is_ok());
+        assert_eq!(
+            interpreter.environment.borrow().get("x").unwrap(),
+            LoxValue::Number(42.0)
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 2: Complete flow - var without initializer
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_integration_var_without_initializer() {
+        // Source: var y;
+        let source = "var y;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        
+        assert!(result.is_ok());
+        assert_eq!(
+            interpreter.environment.borrow().get("y").unwrap(),
+            LoxValue::Nil
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 3: Complete flow - multiple variables
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_integration_multiple_variables() {
+        // Source:
+        // var a = 1;
+        // var b = 2;
+        // var c = 3;
+        let source = "var a = 1;\nvar b = 2;\nvar c = 3;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        
+        assert!(result.is_ok());
+        assert_eq!(
+            interpreter.environment.borrow().get("a").unwrap(),
+            LoxValue::Number(1.0)
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("b").unwrap(),
+            LoxValue::Number(2.0)
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("c").unwrap(),
+            LoxValue::Number(3.0)
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 4: Complete flow - var with expression
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_integration_var_with_expression() {
+        // Source: var result = 10 + 20 * 2;
+        let source = "var result = 10 + 20 * 2;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        
+        assert!(result.is_ok());
+        // Should be 10 + (20 * 2) = 10 + 40 = 50
+        assert_eq!(
+            interpreter.environment.borrow().get("result").unwrap(),
+            LoxValue::Number(50.0)
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 5: Complete flow - declare then use variable
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_integration_declare_and_use() {
+        // Source:
+        // var x = 10;
+        // var y = x + 5;
+        let source = "var x = 10;\nvar y = x + 5;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        
+        assert!(result.is_ok());
+        assert_eq!(
+            interpreter.environment.borrow().get("x").unwrap(),
+            LoxValue::Number(10.0)
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("y").unwrap(),
+            LoxValue::Number(15.0)
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 6: Complete flow - string variables
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_integration_string_variables() {
+        // Source:
+        // var first = "Hello";
+        // var last = "World";
+        // var greeting = first + " " + last;
+        let source = r#"var first = "Hello";
+var last = "World";
+var greeting = first + " " + last;"#;
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        
+        assert!(result.is_ok());
+        assert_eq!(
+            interpreter.environment.borrow().get("greeting").unwrap(),
+            LoxValue::String("Hello World".to_string())
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 7: Complete flow - variable redefinition
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_integration_var_redefinition() {
+        // Source:
+        // var x = "before";
+        // var x = "after";
+        let source = r#"var x = "before";
+var x = "after";"#;
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        
+        assert!(result.is_ok());
+        assert_eq!(
+            interpreter.environment.borrow().get("x").unwrap(),
+            LoxValue::String("after".to_string())
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 8: Complete flow - mixed statements and variables
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_integration_mixed_statements() {
+        // Source:
+        // var x = 5;
+        // print x;
+        // var y = x * 2;
+        // print y;
+        let source = "var x = 5;\nprint x;\nvar y = x * 2;\nprint y;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        
+        assert!(result.is_ok());
+        assert_eq!(
+            interpreter.environment.borrow().get("x").unwrap(),
+            LoxValue::Number(5.0)
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("y").unwrap(),
+            LoxValue::Number(10.0)
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 9: Complete flow - complex expression with variables
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_integration_complex_expression() {
+        // Source:
+        // var a = 2;
+        // var b = 3;
+        // var c = 4;
+        // var result = (a + b) * c;
+        let source = "var a = 2;\nvar b = 3;\nvar c = 4;\nvar result = (a + b) * c;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        
+        assert!(result.is_ok());
+        // (2 + 3) * 4 = 20
+        assert_eq!(
+            interpreter.environment.borrow().get("result").unwrap(),
+            LoxValue::Number(20.0)
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 10: Complete flow - comparison with variables
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_integration_comparison_with_variables() {
+        // Source:
+        // var age = 25;
+        // var isAdult = age >= 18;
+        let source = "var age = 25;\nvar isAdult = age >= 18;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        
+        assert!(result.is_ok());
+        assert_eq!(
+            interpreter.environment.borrow().get("isAdult").unwrap(),
+            LoxValue::Boolean(true)
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 11: Complete flow - boolean variables
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_integration_boolean_variables() {
+        // Source:
+        // var flag = true;
+        // var notFlag = !flag;
+        let source = "var flag = true;\nvar notFlag = !flag;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        
+        assert!(result.is_ok());
+        assert_eq!(
+            interpreter.environment.borrow().get("flag").unwrap(),
+            LoxValue::Boolean(true)
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("notFlag").unwrap(),
+            LoxValue::Boolean(false)
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 12: Complete flow - nil handling
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_integration_nil_handling() {
+        // Source:
+        // var nothing;
+        // var something = nothing;
+        let source = "var nothing;\nvar something = nothing;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        
+        assert!(result.is_ok());
+        assert_eq!(
+            interpreter.environment.borrow().get("nothing").unwrap(),
+            LoxValue::Nil
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("something").unwrap(),
+            LoxValue::Nil
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 13: Error - undefined variable in expression
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_integration_error_undefined_variable() {
+        // Source: var x = undefinedVar + 1;
+        let source = "var x = undefinedVar + 1;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.message.contains("Undefined"));
+        assert!(error.message.contains("undefinedVar"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 14: Complete flow - realistic program
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_integration_realistic_program() {
+        // Source: A more realistic Lox program
+        let source = r#"
+var name = "Alice";
+var age = 30;
+var isStudent = false;
+
+var greeting = "Hello, " + name;
+var yearsUntilRetirement = 65 - age;
+
+var taxRate = 0.2;
+var salary = 50000;
+var netIncome = salary * (1 - taxRate);
+"#;
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        
+        assert!(result.is_ok());
+        
+        // Verify all variables
+        assert_eq!(
+            interpreter.environment.borrow().get("name").unwrap(),
+            LoxValue::String("Alice".to_string())
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("age").unwrap(),
+            LoxValue::Number(30.0)
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("greeting").unwrap(),
+            LoxValue::String("Hello, Alice".to_string())
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("yearsUntilRetirement").unwrap(),
+            LoxValue::Number(35.0)
+        );
+        assert_eq!(
+            interpreter.environment.borrow().get("netIncome").unwrap(),
+            LoxValue::Number(40000.0)
+        );
+    }
 }
 
 // =============================================================================
@@ -2265,15 +3274,24 @@ mod tests {
 
 impl stmt::Visitor<Result<(), RuntimeError>> for Interpreter {
     fn visit_expression_stmt(&self, stmt: &stmt::ExpressionStmt) -> Result<(), RuntimeError> {
-        // Evaluate the expression and discard the result
         self.evaluate(&stmt.expression)?;
         Ok(())
     }
 
     fn visit_print_stmt(&self, stmt: &stmt::PrintStmt) -> Result<(), RuntimeError> {
-        // Evaluate the expression and print the result
         let value = self.evaluate(&stmt.expression)?;
         println!("{}", value);
+        Ok(())
+    }
+
+    fn visit_var_stmt(&self, stmt: &stmt::VarStmt) -> Result<(), RuntimeError> {
+        let value = if let Some(initializer) = &stmt.initializer {
+            self.evaluate(initializer)?
+        } else {
+            LoxValue::Nil
+        };
+
+        self.environment.borrow_mut().define(stmt.name.lexeme.clone(), value);
         Ok(())
     }
 }

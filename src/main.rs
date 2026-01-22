@@ -5,6 +5,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::{env, process};
 
+mod environment;
 mod expr;
 mod lox_interpreter;
 mod lox_parser;
