@@ -1,5 +1,5 @@
-use crate::expr::{Binary, ExprEnum, Grouping, Literal, Unary, Variable};
-use crate::stmt::{ExpressionStmt, PrintStmt, StmtEnum, VarStmt};
+use crate::expr::{Assign, Binary, ExprEnum, Grouping, Literal, Unary, Variable};
+use crate::stmt::{BlockStmt, ExpressionStmt, PrintStmt, StmtEnum, VarStmt};
 use crate::token::Token;
 use crate::token_types::TokenType::{self, *};
 
@@ -80,7 +80,21 @@ impl LoxParser {
         if self.match_tokens(&[Print]) {
             return self.print_statement();
         }
+        if self.match_tokens(&[LeftBrace]) {
+            return self.block();
+        }
         self.expression_statement()
+    }
+
+    fn block(&mut self) -> StmtEnum {
+        let mut statements = Vec::new();
+
+        while !self.check(RightBrace) && !self.is_at_end() {
+            statements.push(self.declaration());
+        }
+
+        self.consume(RightBrace, "Expect '}' after block.");
+        StmtEnum::Block(BlockStmt { statements })
     }
 
     fn print_statement(&mut self) -> StmtEnum {
@@ -96,7 +110,30 @@ impl LoxParser {
     }
 
     fn expression(&mut self) -> Box<ExprEnum> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Box<ExprEnum> {
+        let expr = self.equality();
+
+        if self.match_tokens(&[Equal]) {
+            let equals = self.previous();
+            let value = self.assignment();
+
+            match *expr {
+                ExprEnum::Variable(v) => {
+                    return Box::new(ExprEnum::Assign(Assign {
+                        name: v.name,
+                        value,
+                    }));
+                }
+                _ => {
+                    self.error(equals, "Invalid assignment target.");
+                }
+            }
+        }
+
+        expr
     }
 
     fn equality(&mut self) -> Box<ExprEnum> {
@@ -210,6 +247,13 @@ impl LoxParser {
 
     fn is_at_end(&self) -> bool {
         self.peek().token_type == Eof
+    }
+
+    fn check(&self, token_type: TokenType) -> bool {
+        if self.is_at_end() {
+            return false;
+        }
+        self.peek().token_type == token_type
     }
 
     fn match_tokens(&mut self, token_types: &[TokenType]) -> bool {
@@ -502,8 +546,6 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_variable_expression() {
-        use crate::expr::Variable;
-        
         // Tokens for: x
         let tokens = vec![
             Token::new(TokenType::Identifier, "x".to_string(), None, 1),
@@ -527,7 +569,7 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_variable_in_binary() {
-        use crate::expr::{Binary, Variable};
+        use crate::expr::Binary;
         
         // Tokens for: a + 1
         let tokens = vec![
@@ -569,7 +611,7 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_two_variables_in_binary() {
-        use crate::expr::{Binary, Variable};
+        use crate::expr::Binary;
         
         // Tokens for: x + y
         let tokens = vec![
@@ -610,7 +652,7 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_variable_in_grouping() {
-        use crate::expr::{Grouping, Variable};
+        use crate::expr::Grouping;
         
         // Tokens for: (x)
         let tokens = vec![
@@ -642,7 +684,7 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_variable_in_unary() {
-        use crate::expr::{Unary, Variable};
+        use crate::expr::Unary;
         
         // Tokens for: -x
         let tokens = vec![
@@ -675,7 +717,7 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_complex_expression_with_variables() {
-        use crate::expr::{Binary, Variable};
+        use crate::expr::Binary;
         
         // Tokens for: a * b + c
         let tokens = vec![
@@ -728,8 +770,6 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_different_variable_names() {
-        use crate::expr::Variable;
-        
         let test_cases = vec!["x", "myVar", "userName", "count123", "_private"];
 
         for name in test_cases {
@@ -755,7 +795,7 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_comparison_with_variables() {
-        use crate::expr::{Binary, Variable};
+        use crate::expr::Binary;
         
         // Tokens for: x > y
         let tokens = vec![

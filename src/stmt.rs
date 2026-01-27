@@ -7,6 +7,7 @@ pub enum StmtEnum {
     Expression(ExpressionStmt),
     Print(PrintStmt),
     Var(VarStmt),
+    Block(BlockStmt),
     None,
 }
 
@@ -17,6 +18,7 @@ impl StmtEnum {
             StmtEnum::Expression(stmt) => visitor.visit_expression_stmt(stmt),
             StmtEnum::Print(stmt) => visitor.visit_print_stmt(stmt),
             StmtEnum::Var(stmt) => visitor.visit_var_stmt(stmt),
+            StmtEnum::Block(stmt) => visitor.visit_block_stmt(stmt),
             StmtEnum::None => panic!("Invalid statement type"),
         }
     }
@@ -42,6 +44,11 @@ pub(crate) struct VarStmt {
     pub(crate) initializer: Option<Box<ExprEnum>>,
 }
 
+// Block statement: groups multiple statements into a block
+pub(crate) struct BlockStmt {
+    pub(crate) statements: Vec<StmtEnum>,
+}
+
 // Visitor trait for statements
 // Unlike expressions which return values, statements return a generic type T
 // (typically Result<(), String> for execution)
@@ -49,6 +56,7 @@ pub trait Visitor<T> {
     fn visit_expression_stmt(&self, stmt: &ExpressionStmt) -> T;
     fn visit_print_stmt(&self, stmt: &PrintStmt) -> T;
     fn visit_var_stmt(&self, stmt: &VarStmt) -> T;
+    fn visit_block_stmt(&self, stmt: &BlockStmt) -> T;
 }
 
 #[cfg(test)]
@@ -78,6 +86,10 @@ mod tests {
 
         fn visit_var_stmt(&self, _stmt: &VarStmt) -> String {
             "var-stmt".to_string()
+        }
+
+        fn visit_block_stmt(&self, _stmt: &BlockStmt) -> String {
+            "block-stmt".to_string()
         }
     }
 

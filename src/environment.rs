@@ -14,11 +14,14 @@
 
 use std::collections::HashMap;
 use crate::lox_interpreter::LoxValue;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 /// Environment stores variable bindings (name -> value mappings)
 #[allow(dead_code)]
 pub struct Environment {
     values: HashMap<String, LoxValue>,
+    enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
 #[allow(dead_code)]
@@ -27,6 +30,15 @@ impl Environment {
     pub fn new() -> Self {
         Environment {
             values: HashMap::new(),
+            enclosing: None,
+        }
+    }
+
+    /// Creates a new environment enclosed in the given outer environment
+    pub fn new_enclosed(enclosing: Rc<RefCell<Environment>>) -> Self {
+        Environment {
+            values: HashMap::new(),
+            enclosing: Some(enclosing),
         }
     }
 
@@ -40,9 +52,25 @@ impl Environment {
     /// Retrieves the value of a variable.
     /// Returns an error if the variable is not defined.
     pub fn get(&self, name: &str) -> Result<LoxValue, String> {
-        match self.values.get(name) {
-            Some(value) => Ok(value.clone()),
-            None => Err(format!("Undefined variable '{}'.", name)),
+        if let Some(value) = self.values.get(name) {
+            Ok(value.clone())
+        } else if let Some(enclosing) = &self.enclosing {
+            enclosing.borrow().get(name)
+        } else {
+            Err(format!("Undefined variable '{}'.", name))
+        }
+    }
+
+    /// Assigns a value to an existing variable.
+    /// Returns an error if the variable is not defined.
+    pub fn assign(&mut self, name: String, value: LoxValue) -> Result<(), String> {
+        if self.values.contains_key(&name) {
+            self.values.insert(name, value);
+            Ok(())
+        } else if let Some(enclosing) = &self.enclosing {
+            enclosing.borrow_mut().assign(name, value)
+        } else {
+            Err(format!("Undefined variable '{}'.", name))
         }
     }
 }
@@ -206,5 +234,31 @@ mod tests {
             "Error should include variable name, got: {}",
             error
         );
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 9: Assign to existing variable
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_environment_assign_existing() {
+        let mut env = Environment::new();
+        env.define("a".to_string(), LoxValue::Number(1.0));
+        
+        let result = env.assign("a".to_string(), LoxValue::Number(2.0));
+        assert!(result.is_ok());
+        
+        assert_eq!(env.get("a").unwrap(), LoxValue::Number(2.0));
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 10: Assign to undefined variable
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_environment_assign_undefined() {
+        let mut env = Environment::new();
+        
+        let result = env.assign("undefined".to_string(), LoxValue::Number(1.0));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Undefined variable"));
     }
 }

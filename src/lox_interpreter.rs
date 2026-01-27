@@ -261,6 +261,7 @@
 
 use std::cell::RefCell;
 use std::fmt;
+use std::rc::Rc;
 
 use crate::environment::Environment;
 use crate::stmt;
@@ -321,14 +322,14 @@ impl fmt::Display for RuntimeError {
 
 /// Interpreter evaluates Lox expressions and executes statements.
 pub struct Interpreter {
-    environment: RefCell<Environment>,
+    pub(crate) environment: RefCell<Rc<RefCell<Environment>>>,
 }
 
 impl Interpreter {
     /// Creates a new interpreter with an empty environment.
     pub fn new() -> Self {
         Interpreter {
-            environment: RefCell::new(Environment::new()),
+            environment: RefCell::new(Rc::new(RefCell::new(Environment::new()))),
         }
     }
 
@@ -349,28 +350,50 @@ impl Interpreter {
         stmt.accept(self)
     }
 
+    fn execute_block(
+        &self,
+        statements: &[stmt::StmtEnum],
+        environment: Environment,
+    ) -> Result<(), RuntimeError> {
+        let previous = self.environment.replace(Rc::new(RefCell::new(environment)));
+        
+        let result = statements.iter().try_for_each(|stmt| self.execute(stmt));
+        
+        self.environment.replace(previous);
+        result
+    }
+
     /// Determines if a LoxValue is truthy.
     /// In Lox: false and nil are falsey, everything else is truthy.
     fn is_truthy(value: &LoxValue) -> bool {
         !matches!(value, LoxValue::Nil | LoxValue::Boolean(false))
     }
 
-    fn check_number_operand(operator: &crate::token::Token, operand: &LoxValue) -> Result<(), RuntimeError> {
+    fn get_number_operand(operator: &crate::token::Token, operand: &LoxValue) -> Result<f64, RuntimeError> {
         match operand {
-            LoxValue::Number(_) => Ok(()),
+            LoxValue::Number(n) => Ok(*n),
             _ => Err(RuntimeError::new("Operand must be a number.".to_string(), operator.line)),
         }
     }
 
-    fn check_number_operands(operator: &crate::token::Token, left: &LoxValue, right: &LoxValue) -> Result<(), RuntimeError> {
+    fn get_number_operands(operator: &crate::token::Token, left: &LoxValue, right: &LoxValue) -> Result<(f64, f64), RuntimeError> {
         match (left, right) {
-            (LoxValue::Number(_), LoxValue::Number(_)) => Ok(()),
+            (LoxValue::Number(l), LoxValue::Number(r)) => Ok((*l, *r)),
             _ => Err(RuntimeError::new("Operands must be numbers.".to_string(), operator.line)),
         }
     }
 }
 
 impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
+    fn visit_assign(&self, expr: &crate::expr::Assign) -> Result<LoxValue, RuntimeError> {
+        let value = self.evaluate(&expr.value)?;
+        
+        match self.environment.borrow().borrow_mut().assign(expr.name.lexeme.clone(), value.clone()) {
+            Ok(_) => Ok(value),
+            Err(msg) => Err(RuntimeError::new(msg, expr.name.line)),
+        }
+    }
+
     fn visit_binary(&self, expr: &crate::expr::Binary) -> Result<LoxValue, RuntimeError> {
         let left = self.evaluate(&expr.left)?;
         let right = self.evaluate(&expr.right)?;
@@ -387,22 +410,18 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
             TokenType::Minus | TokenType::Star | TokenType::Slash |
             TokenType::Greater | TokenType::GreaterEqual | 
             TokenType::Less | TokenType::LessEqual => {
-                Self::check_number_operands(&expr.op, &left, &right)?;
-                if let (LoxValue::Number(l), LoxValue::Number(r)) = (&left, &right) {
-                    let result = match expr.op.token_type {
-                        TokenType::Minus => LoxValue::Number(l - r),
-                        TokenType::Star => LoxValue::Number(l * r),
-                        TokenType::Slash => LoxValue::Number(l / r),
-                        TokenType::Greater => LoxValue::Boolean(l > r),
-                        TokenType::GreaterEqual => LoxValue::Boolean(l >= r),
-                        TokenType::Less => LoxValue::Boolean(l < r),
-                        TokenType::LessEqual => LoxValue::Boolean(l <= r),
-                        _ => unreachable!(),
-                    };
-                    Ok(result)
-                } else {
-                    unreachable!()
-                }
+                let (l, r) = Self::get_number_operands(&expr.op, &left, &right)?;
+                let result = match expr.op.token_type {
+                    TokenType::Minus => LoxValue::Number(l - r),
+                    TokenType::Star => LoxValue::Number(l * r),
+                    TokenType::Slash => LoxValue::Number(l / r),
+                    TokenType::Greater => LoxValue::Boolean(l > r),
+                    TokenType::GreaterEqual => LoxValue::Boolean(l >= r),
+                    TokenType::Less => LoxValue::Boolean(l < r),
+                    TokenType::LessEqual => LoxValue::Boolean(l <= r),
+                    _ => unreachable!(),
+                };
+                Ok(result)
             }
             TokenType::EqualEqual => Ok(LoxValue::Boolean(left == right)),
             TokenType::BangEqual => Ok(LoxValue::Boolean(left != right)),
@@ -450,12 +469,8 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
         
         match expr.op.token_type {
             TokenType::Minus => {
-                Self::check_number_operand(&expr.op, &right)?;
-                if let LoxValue::Number(n) = right {
-                    Ok(LoxValue::Number(-n))
-                } else {
-                    unreachable!()
-                }
+                let n = Self::get_number_operand(&expr.op, &right)?;
+                Ok(LoxValue::Number(-n))
             }
             TokenType::Bang => Ok(LoxValue::Boolean(!Self::is_truthy(&right))),
             _ => Err(RuntimeError::new(
@@ -466,7 +481,7 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
     }
 
     fn visit_variable(&self, expr: &crate::expr::Variable) -> Result<LoxValue, RuntimeError> {
-        self.environment.borrow().get(&expr.name.lexeme)
+        self.environment.borrow().borrow().get(&expr.name.lexeme)
             .map_err(|msg| RuntimeError::new(msg, expr.name.line))
     }
 
@@ -2201,7 +2216,7 @@ mod tests {
         let interpreter = Interpreter::new();
         
         // Manually define a variable in the environment
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "x".to_string(),
             LoxValue::Number(42.0)
         );
@@ -2239,7 +2254,7 @@ mod tests {
         let interpreter = Interpreter::new();
         
         // Define: a = 10
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "a".to_string(),
             LoxValue::Number(10.0)
         );
@@ -2264,11 +2279,11 @@ mod tests {
         let interpreter = Interpreter::new();
         
         // Define: x = 5, y = 3
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "x".to_string(),
             LoxValue::Number(5.0)
         );
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "y".to_string(),
             LoxValue::Number(3.0)
         );
@@ -2293,7 +2308,7 @@ mod tests {
         let interpreter = Interpreter::new();
         
         // Define: message = "Hello"
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "message".to_string(),
             LoxValue::String("Hello".to_string())
         );
@@ -2314,7 +2329,7 @@ mod tests {
         let interpreter = Interpreter::new();
         
         // Define: flag = true
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "flag".to_string(),
             LoxValue::Boolean(true)
         );
@@ -2335,7 +2350,7 @@ mod tests {
         let interpreter = Interpreter::new();
         
         // Define: empty = nil
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "empty".to_string(),
             LoxValue::Nil
         );
@@ -2356,7 +2371,7 @@ mod tests {
         let interpreter = Interpreter::new();
         
         // Define: age = 25
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "age".to_string(),
             LoxValue::Number(25.0)
         );
@@ -2381,7 +2396,7 @@ mod tests {
         let interpreter = Interpreter::new();
         
         // Define: x = 10
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "x".to_string(),
             LoxValue::Number(10.0)
         );
@@ -2402,15 +2417,15 @@ mod tests {
         let interpreter = Interpreter::new();
         
         // Define: a = 2, b = 3, c = 4
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "a".to_string(),
             LoxValue::Number(2.0)
         );
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "b".to_string(),
             LoxValue::Number(3.0)
         );
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "c".to_string(),
             LoxValue::Number(4.0)
         );
@@ -2443,7 +2458,7 @@ mod tests {
         let interpreter = Interpreter::new();
         
         // Define only x, not y
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "x".to_string(),
             LoxValue::Number(5.0)
         );
@@ -2470,11 +2485,11 @@ mod tests {
         let interpreter = Interpreter::new();
         
         // Define: variable = 1, Variable = 2
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "variable".to_string(),
             LoxValue::Number(1.0)
         );
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "Variable".to_string(),
             LoxValue::Number(2.0)
         );
@@ -2498,11 +2513,11 @@ mod tests {
         let interpreter = Interpreter::new();
         
         // Define: first = "Hello", last = "World"
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "first".to_string(),
             LoxValue::String("Hello".to_string())
         );
-        interpreter.environment.borrow_mut().define(
+        interpreter.environment.borrow().borrow_mut().define(
             "last".to_string(),
             LoxValue::String("World".to_string())
         );
@@ -2547,7 +2562,7 @@ mod tests {
         assert!(result.is_ok());
         
         // Verify variable was defined in environment
-        let value = interpreter.environment.borrow().get("x");
+        let value = interpreter.environment.borrow().borrow().get("x");
         assert!(value.is_ok());
         assert_eq!(value.unwrap(), LoxValue::Number(42.0));
     }
@@ -2566,7 +2581,7 @@ mod tests {
         assert!(result.is_ok());
         
         // Verify variable was defined as nil
-        let value = interpreter.environment.borrow().get("y");
+        let value = interpreter.environment.borrow().borrow().get("y");
         assert!(value.is_ok());
         assert_eq!(value.unwrap(), LoxValue::Nil);
     }
@@ -2584,7 +2599,7 @@ mod tests {
         
         assert!(result.is_ok());
         
-        let value = interpreter.environment.borrow().get("message");
+        let value = interpreter.environment.borrow().borrow().get("message");
         assert_eq!(value.unwrap(), LoxValue::String("Hello".to_string()));
     }
 
@@ -2601,7 +2616,7 @@ mod tests {
         
         assert!(result.is_ok());
         
-        let value = interpreter.environment.borrow().get("flag");
+        let value = interpreter.environment.borrow().borrow().get("flag");
         assert_eq!(value.unwrap(), LoxValue::Boolean(true));
     }
 
@@ -2619,7 +2634,7 @@ mod tests {
         
         assert!(result.is_ok());
         
-        let value = interpreter.environment.borrow().get("sum");
+        let value = interpreter.environment.borrow().borrow().get("sum");
         assert_eq!(value.unwrap(), LoxValue::Number(15.0));
     }
 
@@ -2641,7 +2656,7 @@ mod tests {
         let result = interpreter.execute(&var_stmt);
         assert!(result.is_ok());
         
-        let value = interpreter.environment.borrow().get("result");
+        let value = interpreter.environment.borrow().borrow().get("result");
         assert_eq!(value.unwrap(), LoxValue::Number(20.0));
     }
 
@@ -2663,15 +2678,15 @@ mod tests {
         
         // All three should be accessible
         assert_eq!(
-            interpreter.environment.borrow().get("a").unwrap(),
+            interpreter.environment.borrow().borrow().get("a").unwrap(),
             LoxValue::Number(1.0)
         );
         assert_eq!(
-            interpreter.environment.borrow().get("b").unwrap(),
+            interpreter.environment.borrow().borrow().get("b").unwrap(),
             LoxValue::Number(2.0)
         );
         assert_eq!(
-            interpreter.environment.borrow().get("c").unwrap(),
+            interpreter.environment.borrow().borrow().get("c").unwrap(),
             LoxValue::Number(3.0)
         );
     }
@@ -2692,7 +2707,7 @@ mod tests {
         assert!(interpreter.execute(&stmt2).is_ok());
         
         // Should have the new value
-        let value = interpreter.environment.borrow().get("x");
+        let value = interpreter.environment.borrow().borrow().get("x");
         assert_eq!(value.unwrap(), LoxValue::String("after".to_string()));
     }
 
@@ -2731,8 +2746,8 @@ mod tests {
         assert!(interpreter.execute(&stmt2).is_ok());
         
         // Both should have the same value
-        let original_value = interpreter.environment.borrow().get("original").unwrap();
-        let copy_value = interpreter.environment.borrow().get("copy").unwrap();
+        let original_value = interpreter.environment.borrow().borrow().get("original").unwrap();
+        let copy_value = interpreter.environment.borrow().borrow().get("copy").unwrap();
         assert_eq!(original_value, LoxValue::Number(42.0));
         assert_eq!(copy_value, LoxValue::Number(42.0));
     }
@@ -2796,19 +2811,19 @@ mod tests {
         
         // Verify all are accessible
         assert_eq!(
-            interpreter.environment.borrow().get("num").unwrap(),
+            interpreter.environment.borrow().borrow().get("num").unwrap(),
             LoxValue::Number(3.14)
         );
         assert_eq!(
-            interpreter.environment.borrow().get("str").unwrap(),
+            interpreter.environment.borrow().borrow().get("str").unwrap(),
             LoxValue::String("test".to_string())
         );
         assert_eq!(
-            interpreter.environment.borrow().get("bool").unwrap(),
+            interpreter.environment.borrow().borrow().get("bool").unwrap(),
             LoxValue::Boolean(false)
         );
         assert_eq!(
-            interpreter.environment.borrow().get("nothing").unwrap(),
+            interpreter.environment.borrow().borrow().get("nothing").unwrap(),
             LoxValue::Nil
         );
     }
@@ -2838,7 +2853,7 @@ mod tests {
         assert!(result.is_ok());
         
         // Verify final result
-        let sum_value = interpreter.environment.borrow().get("sum").unwrap();
+        let sum_value = interpreter.environment.borrow().borrow().get("sum").unwrap();
         assert_eq!(sum_value, LoxValue::Number(30.0));
     }
 
@@ -2869,7 +2884,7 @@ mod tests {
         
         assert!(result.is_ok());
         assert_eq!(
-            interpreter.environment.borrow().get("x").unwrap(),
+            interpreter.environment.borrow().borrow().get("x").unwrap(),
             LoxValue::Number(42.0)
         );
     }
@@ -2893,7 +2908,7 @@ mod tests {
         
         assert!(result.is_ok());
         assert_eq!(
-            interpreter.environment.borrow().get("y").unwrap(),
+            interpreter.environment.borrow().borrow().get("y").unwrap(),
             LoxValue::Nil
         );
     }
@@ -2920,15 +2935,15 @@ mod tests {
         
         assert!(result.is_ok());
         assert_eq!(
-            interpreter.environment.borrow().get("a").unwrap(),
+            interpreter.environment.borrow().borrow().get("a").unwrap(),
             LoxValue::Number(1.0)
         );
         assert_eq!(
-            interpreter.environment.borrow().get("b").unwrap(),
+            interpreter.environment.borrow().borrow().get("b").unwrap(),
             LoxValue::Number(2.0)
         );
         assert_eq!(
-            interpreter.environment.borrow().get("c").unwrap(),
+            interpreter.environment.borrow().borrow().get("c").unwrap(),
             LoxValue::Number(3.0)
         );
     }
@@ -2953,7 +2968,7 @@ mod tests {
         assert!(result.is_ok());
         // Should be 10 + (20 * 2) = 10 + 40 = 50
         assert_eq!(
-            interpreter.environment.borrow().get("result").unwrap(),
+            interpreter.environment.borrow().borrow().get("result").unwrap(),
             LoxValue::Number(50.0)
         );
     }
@@ -2979,11 +2994,11 @@ mod tests {
         
         assert!(result.is_ok());
         assert_eq!(
-            interpreter.environment.borrow().get("x").unwrap(),
+            interpreter.environment.borrow().borrow().get("x").unwrap(),
             LoxValue::Number(10.0)
         );
         assert_eq!(
-            interpreter.environment.borrow().get("y").unwrap(),
+            interpreter.environment.borrow().borrow().get("y").unwrap(),
             LoxValue::Number(15.0)
         );
     }
@@ -3012,7 +3027,7 @@ var greeting = first + " " + last;"#;
         
         assert!(result.is_ok());
         assert_eq!(
-            interpreter.environment.borrow().get("greeting").unwrap(),
+            interpreter.environment.borrow().borrow().get("greeting").unwrap(),
             LoxValue::String("Hello World".to_string())
         );
     }
@@ -3039,7 +3054,7 @@ var x = "after";"#;
         
         assert!(result.is_ok());
         assert_eq!(
-            interpreter.environment.borrow().get("x").unwrap(),
+            interpreter.environment.borrow().borrow().get("x").unwrap(),
             LoxValue::String("after".to_string())
         );
     }
@@ -3067,11 +3082,11 @@ var x = "after";"#;
         
         assert!(result.is_ok());
         assert_eq!(
-            interpreter.environment.borrow().get("x").unwrap(),
+            interpreter.environment.borrow().borrow().get("x").unwrap(),
             LoxValue::Number(5.0)
         );
         assert_eq!(
-            interpreter.environment.borrow().get("y").unwrap(),
+            interpreter.environment.borrow().borrow().get("y").unwrap(),
             LoxValue::Number(10.0)
         );
     }
@@ -3100,7 +3115,7 @@ var x = "after";"#;
         assert!(result.is_ok());
         // (2 + 3) * 4 = 20
         assert_eq!(
-            interpreter.environment.borrow().get("result").unwrap(),
+            interpreter.environment.borrow().borrow().get("result").unwrap(),
             LoxValue::Number(20.0)
         );
     }
@@ -3126,7 +3141,7 @@ var x = "after";"#;
         
         assert!(result.is_ok());
         assert_eq!(
-            interpreter.environment.borrow().get("isAdult").unwrap(),
+            interpreter.environment.borrow().borrow().get("isAdult").unwrap(),
             LoxValue::Boolean(true)
         );
     }
@@ -3152,11 +3167,11 @@ var x = "after";"#;
         
         assert!(result.is_ok());
         assert_eq!(
-            interpreter.environment.borrow().get("flag").unwrap(),
+            interpreter.environment.borrow().borrow().get("flag").unwrap(),
             LoxValue::Boolean(true)
         );
         assert_eq!(
-            interpreter.environment.borrow().get("notFlag").unwrap(),
+            interpreter.environment.borrow().borrow().get("notFlag").unwrap(),
             LoxValue::Boolean(false)
         );
     }
@@ -3182,11 +3197,11 @@ var x = "after";"#;
         
         assert!(result.is_ok());
         assert_eq!(
-            interpreter.environment.borrow().get("nothing").unwrap(),
+            interpreter.environment.borrow().borrow().get("nothing").unwrap(),
             LoxValue::Nil
         );
         assert_eq!(
-            interpreter.environment.borrow().get("something").unwrap(),
+            interpreter.environment.borrow().borrow().get("something").unwrap(),
             LoxValue::Nil
         );
     }
@@ -3246,25 +3261,174 @@ var netIncome = salary * (1 - taxRate);
         
         // Verify all variables
         assert_eq!(
-            interpreter.environment.borrow().get("name").unwrap(),
+            interpreter.environment.borrow().borrow().get("name").unwrap(),
             LoxValue::String("Alice".to_string())
         );
         assert_eq!(
-            interpreter.environment.borrow().get("age").unwrap(),
+            interpreter.environment.borrow().borrow().get("age").unwrap(),
             LoxValue::Number(30.0)
         );
         assert_eq!(
-            interpreter.environment.borrow().get("greeting").unwrap(),
+            interpreter.environment.borrow().borrow().get("greeting").unwrap(),
             LoxValue::String("Hello, Alice".to_string())
         );
         assert_eq!(
-            interpreter.environment.borrow().get("yearsUntilRetirement").unwrap(),
+            interpreter.environment.borrow().borrow().get("yearsUntilRetirement").unwrap(),
             LoxValue::Number(35.0)
         );
         assert_eq!(
-            interpreter.environment.borrow().get("netIncome").unwrap(),
+            interpreter.environment.borrow().borrow().get("netIncome").unwrap(),
             LoxValue::Number(40000.0)
         );
+    }
+
+    // =========================================================================
+    // PHASE 9: ASSIGNMENT TESTS
+    // =========================================================================
+
+    // Helper to create an Assign expression
+    fn make_assign_expr(name: &str, value: crate::expr::ExprEnum) -> crate::expr::ExprEnum {
+        use crate::token::Token;
+        use crate::token_types::TokenType;
+        crate::expr::ExprEnum::Assign(crate::expr::Assign {
+            name: Token::new(TokenType::Identifier, name.to_string(), None, 1),
+            value: Box::new(value),
+        })
+    }
+
+    #[test]
+    fn test_evaluate_assignment() {
+        let interpreter = Interpreter::new();
+        
+        // var a = 1;
+        interpreter.environment.borrow().borrow_mut().define(
+            "a".to_string(),
+            LoxValue::Number(1.0)
+        );
+        
+        // a = 2;
+        let assign_expr = make_assign_expr("a", make_literal(2.0));
+        let result = interpreter.evaluate(&assign_expr);
+        
+        // Should succeed and return assigned value
+        assert!(result.is_ok(), "Assignment should succeed, but got error: {:?}", result.err());
+        assert_eq!(result.unwrap(), LoxValue::Number(2.0));
+        
+        // Environment should be updated
+        let value = interpreter.environment.borrow().borrow().get("a");
+        assert_eq!(value.unwrap(), LoxValue::Number(2.0));
+    }
+
+    #[test]
+    fn test_assignment_to_undefined_variable() {
+        let interpreter = Interpreter::new();
+        
+        // b = 3; (b is not defined)
+        let assign_expr = make_assign_expr("b", make_literal(3.0));
+        let result = interpreter.evaluate(&assign_expr);
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().message.contains("Undefined variable"));
+    }
+
+    #[test]
+    fn test_assignment_returns_value() {
+        let interpreter = Interpreter::new();
+        
+        // var c = 10;
+        interpreter.environment.borrow().borrow_mut().define(
+            "c".to_string(),
+            LoxValue::Number(10.0)
+        );
+        
+        // print (c = 20); should print 20
+        let assign_expr = make_assign_expr("c", make_literal(20.0));
+        let result = interpreter.evaluate(&assign_expr);
+        
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), LoxValue::Number(20.0));
+    }
+
+    #[test]
+    fn test_interpret_block_statement() {
+        use crate::lox_tokenizer::LoxTokenizer;
+        use crate::lox_parser::LoxParser;
+        
+        // {
+        //   var x = 10;
+        //   print x;
+        // }
+        let source = "{ var x = 10; print x; }";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        assert!(!tokenizer.had_error);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        // This assertion will fail if parser doesn't support blocks yet
+        assert!(!parser.has_error, "Parser reported error parsing block");
+        assert_eq!(statements.len(), 1, "Expected 1 statement (block)");
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        assert!(result.is_ok(), "Interpreter execution failed");
+    }
+
+    #[test]
+    fn test_interpret_nested_blocks() {
+        use crate::lox_tokenizer::LoxTokenizer;
+        use crate::lox_parser::LoxParser;
+        
+        let source = "{ var x = 10; { print x; } }";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        assert!(!tokenizer.had_error);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        assert!(!parser.has_error);
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_interpret_scope_shadowing() {
+        use crate::lox_tokenizer::LoxTokenizer;
+        use crate::lox_parser::LoxParser;
+        
+        // var a = "global";
+        // {
+        //   var a = "inner";
+        //   var b = "inner_b";
+        // }
+        // print a; // should be global
+        // // print b; // would be error
+        let source = "var a = \"global\"; { var a = \"inner\"; var b = \"inner_b\"; } print a;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        assert!(!tokenizer.had_error);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        assert!(!parser.has_error);
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        assert!(result.is_ok());
+        
+        // Verify 'a' is 'global' in global environment
+        let val = interpreter.environment.borrow().borrow().get("a");
+        assert_eq!(val.unwrap(), LoxValue::String("global".to_string()));
+        
+        // Verify 'b' is not in global environment
+        let val_b = interpreter.environment.borrow().borrow().get("b");
+        assert!(val_b.is_err());
     }
 }
 
@@ -3291,7 +3455,16 @@ impl stmt::Visitor<Result<(), RuntimeError>> for Interpreter {
             LoxValue::Nil
         };
 
-        self.environment.borrow_mut().define(stmt.name.lexeme.clone(), value);
+        self.environment.borrow().borrow_mut().define(stmt.name.lexeme.clone(), value);
         Ok(())
+    }
+
+    fn visit_block_stmt(&self, stmt: &stmt::BlockStmt) -> Result<(), RuntimeError> {
+        let env_rc = self.environment.borrow().clone();
+        let new_env = Environment::new_enclosed(env_rc);
+        self.execute_block(
+            &stmt.statements,
+            new_env,
+        )
     }
 }

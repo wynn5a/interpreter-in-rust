@@ -4,6 +4,7 @@ use crate::token::Token;
 // Define the enum with variants for each type
 #[allow(dead_code)]
 pub enum ExprEnum {
+    Assign(Assign),
     Binary(Binary),
     Grouping(Grouping),
     Literal(Literal),
@@ -17,6 +18,7 @@ pub enum ExprEnum {
 impl ExprEnum {
     pub(crate) fn accept<T>(&self, visitor: &dyn Visitor<T>) -> T {
         match self {
+            ExprEnum::Assign(expr) => visitor.visit_assign(expr),
             ExprEnum::Binary(expr) => visitor.visit_binary(expr),
             ExprEnum::Grouping(expr) => visitor.visit_grouping(expr),
             ExprEnum::Literal(expr) => visitor.visit_literal(expr),
@@ -32,6 +34,11 @@ pub(crate) struct Binary {
     pub(crate) left: Box<ExprEnum>,
     pub(crate) op: Token,
     pub(crate) right: Box<ExprEnum>,
+}
+
+pub(crate) struct Assign {
+    pub(crate) name: Token,
+    pub(crate) value: Box<ExprEnum>,
 }
 
 pub(crate) struct Literal {
@@ -62,6 +69,7 @@ pub(crate) struct Variable {
 
 // Update the Visitor trait to accept specific types instead of dyn Expr
 pub trait Visitor<T> {
+    fn visit_assign(&self, expr: &Assign) -> T;
     fn visit_binary(&self, expr: &Binary) -> T;
     fn visit_literal(&self, expr: &Literal) -> T;
     fn visit_grouping(&self, expr: &Grouping) -> T;
@@ -73,6 +81,10 @@ pub trait Visitor<T> {
 pub struct AstPrinter;
 
 impl Visitor<String> for AstPrinter {
+    fn visit_assign(&self, expr: &Assign) -> String {
+        format!("(= {} {})", expr.name.lexeme, expr.value.accept(self))
+    }
+
     fn visit_binary(&self, expr: &Binary) -> String {
         format!("({} {} {})", expr.op.lexeme, expr.left.accept(self), expr.right.accept(self))
     }
@@ -395,5 +407,27 @@ mod tests {
             let result = expr.accept(&ast_printer);
             assert_eq!(result, name);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 9: Assignment expression
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_ast_printer_assignment() {
+        // Expression: a = 1
+        let a_token = Token::new(TokenType::Identifier, "a".to_string(), None, 1);
+        
+        let expr = ExprEnum::Assign(Assign {
+            name: a_token,
+            value: Box::new(ExprEnum::Literal(Literal {
+                value: Box::new(1),
+            })),
+        });
+
+        let ast_printer = AstPrinter {};
+        let result = expr.accept(&ast_printer);
+        
+        // Should print: (= a 1)
+        assert_eq!(result, "(= a 1)");
     }
 }

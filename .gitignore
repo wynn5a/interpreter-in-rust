@@ -13,3 +13,5 @@ target/
 .vscode
 .codecrafters
 .DS_Store
+.trae
+.cursor
