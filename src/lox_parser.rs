@@ -1,3 +1,32 @@
+// =============================================================================
+// LOX PARSER
+// =============================================================================
+//
+// This file implements a recursive descent parser for the Lox language.
+// It converts a sequence of Tokens into an Abstract Syntax Tree (AST).
+//
+// Grammar Rules (BNF):
+// program        → declaration* EOF ;
+// declaration    → varDecl | statement ;
+// varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
+// statement      → exprStmt | printStmt | ifStmt | block ;
+// ifStmt         → "if" "(" expression ")" statement ( "else" statement )? ;
+// block          → "{" declaration* "}" ;
+// exprStmt       → expression ";" ;
+// printStmt      → "print" expression ";" ;
+//
+// expression     → assignment ;
+// assignment     → IDENTIFIER "=" assignment | logic_or ;
+// logic_or       → logic_and ( "or" logic_and )* ;
+// logic_and      → equality ( "and" equality )* ;
+// equality       → comparison ( ( "!=" | "==" ) comparison )* ;
+// comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
+// term           → factor ( ( "-" | "+" ) factor )* ;
+// factor         → unary ( ( "/" | "*" ) unary )* ;
+// unary          → ( "!" | "-" ) unary | primary ;
+// primary        → NUMBER | STRING | "true" | "false" | "nil"
+//                | "(" expression ")" | IDENTIFIER ;
+
 use crate::expr::{Assign, Binary, ExprEnum, Grouping, Literal, Unary, Variable};
 use crate::stmt::{BlockStmt, ExpressionStmt, PrintStmt, StmtEnum, VarStmt};
 use crate::token::Token;
@@ -9,22 +38,6 @@ pub(crate) struct LoxParser {
     pub(crate) has_error: bool,
 }
 
-/*
-program        → declaration* EOF ;
-declaration    → varDecl | statement ;
-varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
-statement      → exprStmt | printStmt ;
-
-expression     → equality ;
-equality       → comparison ( ( "!=" | "==" ) comparison )* ;
-comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-term           → factor ( ( "-" | "+" ) factor )* ;
-factor         → unary ( ( "/" | "*" ) unary )* ;
-unary          → ( "!" | "-" ) unary
-| primary ;
-primary        → NUMBER | STRING | "true" | "false" | "nil" | IDENTIFIER
-| "(" expression ")" ;
-*/
 impl LoxParser {
     pub(crate) fn new(tokens: Vec<Token>) -> Self {
         LoxParser {
@@ -49,10 +62,32 @@ impl LoxParser {
         let mut statements = Vec::new();
         
         while !self.is_at_end() {
+            let start = self.current;
             statements.push(self.declaration());
+            
+            // Panic mode recovery: if we didn't advance and have an error,
+            // we must advance to avoid infinite loops.
+            if self.current == start && self.has_error {
+                self.synchronize();
+            }
         }
         
         statements
+    }
+
+    fn synchronize(&mut self) {
+        self.advance();
+
+        while !self.is_at_end() {
+            if self.previous().token_type == Semicolon { return; }
+
+            match self.peek().token_type {
+                Class | Fun | Var | For | If | While | Print | Return => return,
+                _ => {},
+            }
+
+            self.advance();
+        }
     }
 
     fn declaration(&mut self) -> StmtEnum {
@@ -77,6 +112,9 @@ impl LoxParser {
     }
 
     fn statement(&mut self) -> StmtEnum {
+        if self.match_tokens(&[If]) {
+            return self.if_statement();
+        }
         if self.match_tokens(&[Print]) {
             return self.print_statement();
         }
@@ -84,6 +122,25 @@ impl LoxParser {
             return self.block();
         }
         self.expression_statement()
+    }
+
+    fn if_statement(&mut self) -> StmtEnum {
+        self.consume(LeftParen, "Expect '(' after 'if'.");
+        let condition = self.expression();
+        self.consume(RightParen, "Expect ')' after if condition.");
+
+        let then_branch = Box::new(self.statement());
+        let else_branch = if self.match_tokens(&[Else]) {
+            Some(Box::new(self.statement()))
+        } else {
+            None
+        };
+
+        StmtEnum::If(crate::stmt::IfStmt {
+            condition,
+            then_branch,
+            else_branch,
+        })
     }
 
     fn block(&mut self) -> StmtEnum {
@@ -114,7 +171,7 @@ impl LoxParser {
     }
 
     fn assignment(&mut self) -> Box<ExprEnum> {
-        let expr = self.equality();
+        let expr = self.or();
 
         if self.match_tokens(&[Equal]) {
             let equals = self.previous();
@@ -131,6 +188,38 @@ impl LoxParser {
                     self.error(equals, "Invalid assignment target.");
                 }
             }
+        }
+
+        expr
+    }
+
+    fn or(&mut self) -> Box<ExprEnum> {
+        let mut expr = self.and();
+
+        while self.match_tokens(&[Or]) {
+            let operator = self.previous();
+            let right = self.and();
+            expr = Box::new(ExprEnum::Logical(crate::expr::Logical {
+                left: expr,
+                op: operator,
+                right,
+            }));
+        }
+
+        expr
+    }
+
+    fn and(&mut self) -> Box<ExprEnum> {
+        let mut expr = self.equality();
+
+        while self.match_tokens(&[And]) {
+            let operator = self.previous();
+            let right = self.equality();
+            expr = Box::new(ExprEnum::Logical(crate::expr::Logical {
+                left: expr,
+                op: operator,
+                right,
+            }));
         }
 
         expr
@@ -207,7 +296,7 @@ impl LoxParser {
         }
         if self.match_tokens(&[Nil]) {
             return Box::new(ExprEnum::Literal(Literal {
-                value: Box::new("nil"),
+                value: Box::new(()),
             }));
         }
         if self.match_tokens(&[Number]) {
@@ -569,7 +658,6 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_variable_in_binary() {
-        use crate::expr::Binary;
         
         // Tokens for: a + 1
         let tokens = vec![
@@ -611,7 +699,6 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_two_variables_in_binary() {
-        use crate::expr::Binary;
         
         // Tokens for: x + y
         let tokens = vec![
@@ -652,7 +739,6 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_variable_in_grouping() {
-        use crate::expr::Grouping;
         
         // Tokens for: (x)
         let tokens = vec![
@@ -684,7 +770,6 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_variable_in_unary() {
-        use crate::expr::Unary;
         
         // Tokens for: -x
         let tokens = vec![
@@ -717,7 +802,6 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_complex_expression_with_variables() {
-        use crate::expr::Binary;
         
         // Tokens for: a * b + c
         let tokens = vec![
@@ -795,7 +879,6 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_comparison_with_variables() {
-        use crate::expr::Binary;
         
         // Tokens for: x > y
         let tokens = vec![
@@ -1170,6 +1253,70 @@ mod tests {
             }
             _ => panic!("Expected Var statement"),
         }
+    }
+
+    #[test]
+    fn test_parse_logical_or() {
+        let tokens = vec![
+            Token::new(TokenType::Nil, "nil".to_string(), None, 1),
+            Token::new(TokenType::Or, "or".to_string(), None, 1),
+            Token::new(TokenType::String, "\"ok\"".to_string(), Some("ok".to_string()), 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let (printed, has_error) = parse_and_print(tokens);
+        assert_eq!(printed, "(or nil ok)");
+        assert!(!has_error);
+    }
+
+    #[test]
+    fn test_parse_logical_and() {
+        let tokens = vec![
+            Token::new(TokenType::True, "true".to_string(), None, 1),
+            Token::new(TokenType::And, "and".to_string(), None, 1),
+            Token::new(TokenType::False, "false".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let (printed, has_error) = parse_and_print(tokens);
+        assert_eq!(printed, "(and true false)");
+        assert!(!has_error);
+    }
+
+    #[test]
+    fn test_parse_logical_precedence_or_and() {
+        // "true or false and nil" -> "(or true (and false nil))"
+        let tokens = vec![
+            Token::new(TokenType::True, "true".to_string(), None, 1),
+            Token::new(TokenType::Or, "or".to_string(), None, 1),
+            Token::new(TokenType::False, "false".to_string(), None, 1),
+            Token::new(TokenType::And, "and".to_string(), None, 1),
+            Token::new(TokenType::Nil, "nil".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let (printed, has_error) = parse_and_print(tokens);
+        assert_eq!(printed, "(or true (and false nil))");
+        assert!(!has_error);
+    }
+
+    #[test]
+    fn test_parse_logical_precedence_equality() {
+        // "1 == 1 or 2 == 2" -> "(or (== 1 1) (== 2 2))"
+        let tokens = vec![
+            Token::new(TokenType::Number, "1".to_string(), Some("1".to_string()), 1),
+            Token::new(TokenType::EqualEqual, "==".to_string(), None, 1),
+            Token::new(TokenType::Number, "1".to_string(), Some("1".to_string()), 1),
+            Token::new(TokenType::Or, "or".to_string(), None, 1),
+            Token::new(TokenType::Number, "2".to_string(), Some("2".to_string()), 1),
+            Token::new(TokenType::EqualEqual, "==".to_string(), None, 1),
+            Token::new(TokenType::Number, "2".to_string(), Some("2".to_string()), 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let (printed, has_error) = parse_and_print(tokens);
+        assert_eq!(printed, "(or (== 1 1) (== 2 2))");
+        assert!(!has_error);
     }
 }
 

@@ -1,3 +1,15 @@
+// =============================================================================
+// LOX EXPRESSION AST
+// =============================================================================
+//
+// This file defines the Abstract Syntax Tree (AST) nodes for expressions.
+// Expressions evaluate to a value (LoxValue).
+//
+// Pattern: Visitor Pattern
+// - ExprEnum: Wrapper enum for all expression types.
+// - Visitor: Trait for traversing the expression tree.
+// - Specific structs (Binary, Unary, Literal, etc.): Data holders for each node.
+
 use std::any::Any;
 use crate::token::Token;
 
@@ -102,6 +114,8 @@ impl Visitor<String> for AstPrinter {
             v.to_string()
         } else if let Some(v) = expr.value.downcast_ref::<f64>() {
             v.to_string()
+        } else if let Some(_) = expr.value.downcast_ref::<()>() {
+            "nil".to_string()
         } else {
             panic!("Unsupported type")
         }

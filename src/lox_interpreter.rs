@@ -1,262 +1,14 @@
 // =============================================================================
-// LOX INTERPRETER - TDD IMPLEMENTATION PLAN
+// LOX INTERPRETER
 // =============================================================================
-// 
-// This file implements expression evaluation following the Crafting Interpreters
-// book (Chapter 7: Evaluating Expressions)
+//
+// This file implements the core interpreter logic:
+// 1. Expression evaluation (LoxValue, Visitor implementation)
+// 2. Statement execution
+// 3. Runtime error handling
+//
 // Reference: https://craftinginterpreters.com/evaluating-expressions.html
 //
-// Following Test-Driven Development (TDD) approach:
-// 1. Write failing tests
-// 2. Implement minimal code to pass tests
-// 3. Refactor
-// 4. Repeat
-//
-// Rust adaptations from Java:
-// - Java's Object → Rust enum (LoxValue)
-// - Java's instanceof → Rust pattern matching
-// - Java exceptions → Rust Result<T, E>
-// - Java's null → Rust's Nil variant in LoxValue
-//
-// =============================================================================
-
-// -----------------------------------------------------------------------------
-// PHASE 1: DEFINE RUNTIME VALUE TYPE
-// -----------------------------------------------------------------------------
-// 
-// TODO: Create LoxValue enum to represent runtime values
-// - Number(f64)     - numeric literals and arithmetic results
-// - String(String)  - string literals and concatenation results
-// - Boolean(bool)   - true/false
-// - Nil             - null/nil value
-//
-// TODO: Implement Display trait for LoxValue
-// - Format numbers, strings, booleans, and nil appropriately
-// - Handle special cases (e.g., remove trailing .0 for whole numbers)
-//
-// TESTS TO WRITE:
-// - test_lox_value_display_number()
-// - test_lox_value_display_string()
-// - test_lox_value_display_boolean()
-// - test_lox_value_display_nil()
-
-// -----------------------------------------------------------------------------
-// PHASE 2: CREATE INTERPRETER STRUCT
-// -----------------------------------------------------------------------------
-//
-// TODO: Create Interpreter struct
-// - Will implement Visitor<Result<LoxValue, String>> trait
-// - Use Result to handle runtime errors gracefully
-//
-// TODO: Implement constructor
-// - new() -> Self
-// - Initialize any necessary state (if needed later for variables)
-//
-// TESTS TO WRITE:
-// - test_interpreter_creation()
-
-// -----------------------------------------------------------------------------
-// PHASE 3: IMPLEMENT LITERAL EVALUATION (EASIEST - START HERE)
-// -----------------------------------------------------------------------------
-//
-// TODO: Implement visit_literal() for Interpreter
-// - Convert Box<dyn Any> from AST to LoxValue
-// - Handle: f64, i32, i64, bool, String, &str
-// - Return error for unsupported types
-//
-// TESTS TO WRITE:
-// - test_eval_literal_number()          - "42" -> 42.0
-// - test_eval_literal_float()           - "3.14" -> 3.14
-// - test_eval_literal_string()          - "\"hello\"" -> "hello"
-// - test_eval_literal_boolean_true()    - "true" -> true
-// - test_eval_literal_boolean_false()   - "false" -> false
-// - test_eval_literal_nil()             - "nil" -> nil
-
-// -----------------------------------------------------------------------------
-// PHASE 4: IMPLEMENT GROUPING EVALUATION (SIMPLE RECURSION)
-// -----------------------------------------------------------------------------
-//
-// TODO: Implement visit_grouping() for Interpreter
-// - Simply evaluate the inner expression
-// - Return the result
-//
-// TESTS TO WRITE:
-// - test_eval_grouping_number()         - "(42)" -> 42.0
-// - test_eval_nested_grouping()         - "((42))" -> 42.0
-
-// -----------------------------------------------------------------------------
-// PHASE 5: IMPLEMENT UNARY OPERATORS
-// -----------------------------------------------------------------------------
-//
-// TODO: Implement visit_unary() for Interpreter
-// - Handle "-" (negation):
-//   - Only works on numbers
-//   - Error if operand is not a number
-// - Handle "!" (logical not):
-//   - Works on any value
-//   - false and nil are falsey, everything else is truthy
-//
-// TODO: Helper function - is_truthy(value: &LoxValue) -> bool
-// - Returns false for: false, nil
-// - Returns true for: everything else (including 0, empty string)
-//
-// TESTS TO WRITE:
-// - test_eval_unary_minus_number()      - "-42" -> -42.0
-// - test_eval_unary_minus_negative()    - "-(-42)" -> 42.0
-// - test_eval_unary_minus_error()       - "-true" -> ERROR
-// - test_eval_unary_not_true()          - "!true" -> false
-// - test_eval_unary_not_false()         - "!false" -> true
-// - test_eval_unary_not_nil()           - "!nil" -> true
-// - test_eval_unary_not_number()        - "!0" -> false (0 is truthy)
-// - test_eval_unary_not_string()        - "!\"\"" -> false (empty string is truthy)
-
-// -----------------------------------------------------------------------------
-// PHASE 6: IMPLEMENT ARITHMETIC BINARY OPERATORS
-// -----------------------------------------------------------------------------
-//
-// TODO: Implement arithmetic operations in visit_binary()
-// - Handle "+":
-//   - Number + Number -> Number (addition)
-//   - String + String -> String (concatenation)
-//   - Error for other type combinations
-// - Handle "-", "*", "/" (require both operands to be numbers):
-//   - Check types before operation
-//   - Handle division by zero for "/"
-//
-// TESTS TO WRITE:
-// - test_eval_binary_add_numbers()      - "1 + 2" -> 3.0
-// - test_eval_binary_add_strings()      - "\"hello\" + \" world\"" -> "hello world"
-// - test_eval_binary_add_error()        - "1 + \"hello\"" -> ERROR
-// - test_eval_binary_subtract()         - "5 - 3" -> 2.0
-// - test_eval_binary_multiply()         - "4 * 5" -> 20.0
-// - test_eval_binary_divide()           - "10 / 2" -> 5.0
-// - test_eval_binary_divide_by_zero()   - "1 / 0" -> ERROR
-// - test_eval_binary_arithmetic_error() - "true - false" -> ERROR
-
-// -----------------------------------------------------------------------------
-// PHASE 7: IMPLEMENT COMPARISON OPERATORS
-// -----------------------------------------------------------------------------
-//
-// TODO: Implement comparison operations in visit_binary()
-// - Handle ">", ">=", "<", "<=" (require numbers):
-//   - Check both operands are numbers
-//   - Return boolean result
-// - Handle "==", "!=" (work on any types):
-//   - Numbers compare by value
-//   - Strings compare by content
-//   - Booleans compare by value
-//   - Nil equals only nil
-//   - Different types are not equal (except for ==)
-//
-// TESTS TO WRITE:
-// - test_eval_binary_greater()          - "5 > 3" -> true
-// - test_eval_binary_greater_false()    - "3 > 5" -> false
-// - test_eval_binary_greater_equal()    - "5 >= 5" -> true
-// - test_eval_binary_less()             - "3 < 5" -> true
-// - test_eval_binary_less_equal()       - "3 <= 3" -> true
-// - test_eval_binary_equal_numbers()    - "42 == 42" -> true
-// - test_eval_binary_equal_strings()    - "\"hi\" == \"hi\"" -> true
-// - test_eval_binary_equal_booleans()   - "true == true" -> true
-// - test_eval_binary_equal_nil()        - "nil == nil" -> true
-// - test_eval_binary_not_equal()        - "1 != 2" -> true
-// - test_eval_binary_equal_diff_types() - "1 == \"1\"" -> false
-// - test_eval_comparison_error()        - "\"a\" > \"b\"" -> ERROR
-
-// -----------------------------------------------------------------------------
-// PHASE 8: IMPLEMENT LOGICAL OPERATORS (IF NEEDED)
-// -----------------------------------------------------------------------------
-//
-// NOTE: "and" and "or" are typically handled differently (short-circuit)
-// They might be separate AST nodes, not binary expressions.
-// Check the parser implementation before implementing these.
-//
-// TODO: If Binary includes "and"/"or":
-// - Handle "and":
-//   - If left is falsey, return left
-//   - Otherwise return right
-// - Handle "or":
-//   - If left is truthy, return left
-//   - Otherwise return right
-//
-// TESTS TO WRITE (if applicable):
-// - test_eval_binary_and_short_circuit()
-// - test_eval_binary_or_short_circuit()
-
-// -----------------------------------------------------------------------------
-// PHASE 9: INTEGRATION AND ERROR HANDLING
-// -----------------------------------------------------------------------------
-//
-// TODO: Create public evaluate() method
-// - Takes ExprEnum, returns Result<LoxValue, String>
-// - Wraps the visitor pattern call
-// - Formats error messages appropriately
-//
-// TODO: Improve error messages
-// - Include operator information in errors
-// - Provide helpful context (e.g., "Operand must be a number")
-//
-// TESTS TO WRITE:
-// - test_eval_complex_expression()      - "(5 + 3) * 2 - 1" -> 15.0
-// - test_eval_mixed_operations()        - "!(5 > 3)" -> false
-// - test_eval_nested_arithmetic()       - "((10 / 2) + 3) * 2" -> 16.0
-// - test_eval_error_messages()          - Verify helpful error messages
-
-// -----------------------------------------------------------------------------
-// PHASE 10: INTEGRATION WITH MAIN.RS
-// -----------------------------------------------------------------------------
-//
-// TODO: Update main.rs to use Interpreter instead of AstPrinter
-// - In "evaluate" command:
-//   1. Parse expression (already done)
-//   2. Create Interpreter instance
-//   3. Call evaluate() method
-//   4. Print result or error
-//   5. Exit with appropriate code
-//
-// MANUAL TESTS TO RUN:
-// - ./your_program.sh evaluate test_files/literals.lox
-// - ./your_program.sh evaluate test_files/arithmetic.lox
-// - ./your_program.sh evaluate test_files/comparisons.lox
-// - ./your_program.sh evaluate test_files/errors.lox
-
-// -----------------------------------------------------------------------------
-// IMPLEMENTATION NOTES
-// -----------------------------------------------------------------------------
-//
-// Type Coercion Rules (from Lox spec):
-// - No implicit type coercion (except for truthiness)
-// - Truthiness: false and nil are falsey, everything else is truthy
-// - Arithmetic operators require numbers (except + which also allows strings)
-// - Comparison operators > >= < <= require numbers
-// - Equality operators == != work on any types
-//
-// Error Handling:
-// - Runtime errors should be Result<LoxValue, String>
-// - Format: "[line X] Error: <message>"
-// - Exit with code 70 for runtime errors (per CodeCrafters spec)
-//
-// Number Representation:
-// - All numbers are f64 internally
-// - Display without .0 for whole numbers (e.g., 42 not 42.0)
-// - Handle infinity and NaN appropriately
-//
-// String Representation:
-// - Store as String in LoxValue
-// - No escape sequence processing needed yet (done by tokenizer)
-//
-// Testing Strategy:
-// - Unit tests for each visitor method
-// - Integration tests for complex expressions
-// - Error case tests for type mismatches
-// - Edge cases: division by zero, NaN, infinity
-//
-// Performance Considerations:
-// - Box<dyn Any> downcast has runtime cost (acceptable for interpreter)
-// - Consider replacing with enum in future refactor
-// - String cloning in operations (acceptable for now)
-//
-// =============================================================================
-// BEGIN IMPLEMENTATION BELOW
 // =============================================================================
 
 use std::cell::RefCell;
@@ -3430,6 +3182,52 @@ var netIncome = salary * (1 - taxRate);
         let val_b = interpreter.environment.borrow().borrow().get("b");
         assert!(val_b.is_err());
     }
+
+    #[test]
+    fn test_interpret_if_statement() {
+        use crate::lox_tokenizer::LoxTokenizer;
+        use crate::lox_parser::LoxParser;
+        
+        let source = "var a = 0; if (true) a = 1;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        assert!(!tokenizer.had_error);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        assert!(!parser.has_error, "Parser failed to parse if statement");
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        assert!(result.is_ok());
+        
+        let val = interpreter.environment.borrow().borrow().get("a");
+        assert_eq!(val.unwrap(), LoxValue::Number(1.0));
+    }
+
+    #[test]
+    fn test_interpret_if_else_statement() {
+        use crate::lox_tokenizer::LoxTokenizer;
+        use crate::lox_parser::LoxParser;
+        
+        let source = "var a = 0; if (false) a = 1; else a = 2;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        assert!(!tokenizer.had_error);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        assert!(!parser.has_error);
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        assert!(result.is_ok());
+        
+        let val = interpreter.environment.borrow().borrow().get("a");
+        assert_eq!(val.unwrap(), LoxValue::Number(2.0));
+    }
 }
 
 // =============================================================================
@@ -3466,5 +3264,17 @@ impl stmt::Visitor<Result<(), RuntimeError>> for Interpreter {
             &stmt.statements,
             new_env,
         )
+    }
+
+    fn visit_if_stmt(&self, stmt: &stmt::IfStmt) -> Result<(), RuntimeError> {
+        let condition = self.evaluate(&stmt.condition)?;
+        
+        if Self::is_truthy(&condition) {
+            self.execute(&stmt.then_branch)
+        } else if let Some(else_branch) = &stmt.else_branch {
+            self.execute(else_branch)
+        } else {
+            Ok(())
+        }
     }
 }

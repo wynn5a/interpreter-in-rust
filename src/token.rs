@@ -1,3 +1,10 @@
+// =============================================================================
+// LOX TOKEN
+// =============================================================================
+//
+// Represents a single token produced by the tokenizer.
+// Contains type, lexeme (raw text), optional literal value, and line number.
+
 use std::fmt;
 
 use crate::token_types::TokenType;

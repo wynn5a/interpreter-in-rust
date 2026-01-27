@@ -1,3 +1,21 @@
+// =============================================================================
+// LOX TOKENIZER
+// =============================================================================
+//
+// This file implements the lexical analyzer (lexer) for the Lox language.
+//
+// key responsibilities:
+// 1. Scan the source code string and convert it into a sequence of Tokens.
+// 2. Handle Unicode characters correctly (using Vec<char> for random access).
+// 3. Report lexical errors (unexpected characters, unterminated strings).
+//
+// Performance Note:
+// The original "Crafting Interpreters" implementation in Java uses string indexing.
+// In Rust, direct string indexing is O(n) because strings are UTF-8.
+// To ensure O(1) access during lookahead/advancement, we convert the input
+// to a Vec<char> at the start. This makes initialization O(n) but scanning O(n),
+// avoiding an overall O(n^2) complexity if we were to use chars().nth() repeatedly.
+
 use crate::token::Token;
 use crate::token_types::TokenType;
 use std::io::Write;
@@ -13,15 +31,14 @@ impl LoxTokenizer {
     }
 }
 
-struct TokenizerState<'a> {
+struct TokenizerState {
     chars: Vec<char>,
     current: usize,
     line: usize,
     tokens: Vec<Token>,
-    input: &'a str,
 }
 
-impl<'a> TokenizerState<'a> {
+impl TokenizerState {
     /// Creates a new TokenizerState with the input string.
     /// Converts the input string to a vector of characters for efficient character access.
     ///
@@ -30,13 +47,12 @@ impl<'a> TokenizerState<'a> {
     ///
     /// # Returns
     /// A new TokenizerState instance initialized for tokenization
-    fn new(input: &'a str) -> Self {
+    fn new(input: &str) -> Self {
         TokenizerState {
             chars: input.chars().collect(),
             current: 0,
             line: 1,
             tokens: Vec::new(),
-            input,
         }
     }
 
@@ -206,9 +222,10 @@ impl<'a> TokenizerState<'a> {
             }
         }
 
-        let number_str = &self.input[start..self.current];
+        // CORRECTED: Use chars slice to construct string, avoiding byte-index issues with Unicode
+        let number_str: String = self.chars[start..self.current].iter().collect();
         let literal = number_str.parse::<f32>().unwrap();
-        self.add_token(TokenType::Number, number_str.to_string(), Some(format!("{:?}", literal)));
+        self.add_token(TokenType::Number, number_str, Some(format!("{:?}", literal)));
     }
 
     /// Parses an identifier or keyword from the current position.
@@ -221,8 +238,9 @@ impl<'a> TokenizerState<'a> {
             self.advance();
         }
 
-        let identifier = &self.input[start..self.current];
-        let token_type = match identifier {
+        // CORRECTED: Use chars slice to construct string, avoiding byte-index issues with Unicode
+        let identifier: String = self.chars[start..self.current].iter().collect();
+        let token_type = match identifier.as_str() {
             "and" => TokenType::And,
             "class" => TokenType::Class,
             "else" => TokenType::Else,
@@ -242,7 +260,7 @@ impl<'a> TokenizerState<'a> {
             _ => TokenType::Identifier,
         };
 
-        self.add_token(token_type, identifier.to_string(), None);
+        self.add_token(token_type, identifier, None);
     }
 }
 
@@ -749,5 +767,24 @@ mod tests {
         ];
         assert_eq!(result, expected);
         assert_eq!(lox.had_error, false);
+    }
+
+    #[test]
+    fn test_unicode_identifiers_crash() {
+        let mut lox = LoxTokenizer::default();
+        // "var café = 1;"
+        // If the implementation mixes char indices with byte slicing, this will likely panic
+        let input = "var café = 1;"; 
+        let result = tokenize(&mut lox, input);
+        
+        let expected = vec![
+            Token::new(TokenType::Var, "var".to_string(), None, 1),
+            Token::new(TokenType::Identifier, "café".to_string(), None, 1),
+            Token::new(TokenType::Equal, "=".to_string(), None, 1),
+            Token::new(TokenType::Number, "1".to_string(), Some("1.0".to_string()), 1),
+            Token::new(TokenType::Semicolon, ";".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+        assert_eq!(result, expected);
     }
 }

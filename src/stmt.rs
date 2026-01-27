@@ -1,3 +1,15 @@
+// =============================================================================
+// LOX STATEMENT AST
+// =============================================================================
+//
+// This file defines the Abstract Syntax Tree (AST) nodes for statements.
+// Statements perform actions (side effects) and do not evaluate to a value.
+//
+// Pattern: Visitor Pattern
+// - StmtEnum: Wrapper enum for all statement types.
+// - Visitor: Trait for traversing the statement tree.
+// - Specific structs (ExpressionStmt, PrintStmt, VarStmt, etc.): Data holders.
+
 use crate::expr::ExprEnum;
 use crate::token::Token;
 
@@ -8,6 +20,7 @@ pub enum StmtEnum {
     Print(PrintStmt),
     Var(VarStmt),
     Block(BlockStmt),
+    If(IfStmt),
     None,
 }
 
@@ -19,6 +32,7 @@ impl StmtEnum {
             StmtEnum::Print(stmt) => visitor.visit_print_stmt(stmt),
             StmtEnum::Var(stmt) => visitor.visit_var_stmt(stmt),
             StmtEnum::Block(stmt) => visitor.visit_block_stmt(stmt),
+            StmtEnum::If(stmt) => visitor.visit_if_stmt(stmt),
             StmtEnum::None => panic!("Invalid statement type"),
         }
     }
@@ -49,6 +63,13 @@ pub(crate) struct BlockStmt {
     pub(crate) statements: Vec<StmtEnum>,
 }
 
+// If statement: conditionally executes statements
+pub(crate) struct IfStmt {
+    pub(crate) condition: Box<ExprEnum>,
+    pub(crate) then_branch: Box<StmtEnum>,
+    pub(crate) else_branch: Option<Box<StmtEnum>>,
+}
+
 // Visitor trait for statements
 // Unlike expressions which return values, statements return a generic type T
 // (typically Result<(), String> for execution)
@@ -57,6 +78,7 @@ pub trait Visitor<T> {
     fn visit_print_stmt(&self, stmt: &PrintStmt) -> T;
     fn visit_var_stmt(&self, stmt: &VarStmt) -> T;
     fn visit_block_stmt(&self, stmt: &BlockStmt) -> T;
+    fn visit_if_stmt(&self, stmt: &IfStmt) -> T;
 }
 
 #[cfg(test)]
@@ -90,6 +112,10 @@ mod tests {
 
         fn visit_block_stmt(&self, _stmt: &BlockStmt) -> String {
             "block-stmt".to_string()
+        }
+
+        fn visit_if_stmt(&self, _stmt: &IfStmt) -> String {
+            "if-stmt".to_string()
         }
     }
 
