@@ -118,10 +118,25 @@ impl LoxParser {
         if self.match_tokens(&[Print]) {
             return self.print_statement();
         }
+        if self.match_tokens(&[While]) {
+            return self.while_statement();
+        }
         if self.match_tokens(&[LeftBrace]) {
             return self.block();
         }
         self.expression_statement()
+    }
+
+    fn while_statement(&mut self) -> StmtEnum {
+        self.consume(LeftParen, "Expect '(' after 'while'.");
+        let condition = self.expression();
+        self.consume(RightParen, "Expect ')' after condition.");
+        let body = Box::new(self.statement());
+
+        StmtEnum::While(crate::stmt::WhileStmt {
+            condition,
+            body,
+        })
     }
 
     fn if_statement(&mut self) -> StmtEnum {
@@ -1317,6 +1332,49 @@ mod tests {
         let (printed, has_error) = parse_and_print(tokens);
         assert_eq!(printed, "(or (== 1 1) (== 2 2))");
         assert!(!has_error);
+    }
+
+    #[test]
+    fn test_parse_while_statement() {
+        // while (true) print "loop";
+        let tokens = vec![
+            Token::new(TokenType::While, "while".to_string(), None, 1),
+            Token::new(TokenType::LeftParen, "(".to_string(), None, 1),
+            Token::new(TokenType::True, "true".to_string(), None, 1),
+            Token::new(TokenType::RightParen, ")".to_string(), None, 1),
+            Token::new(TokenType::Print, "print".to_string(), None, 1),
+            Token::new(TokenType::String, "\"loop\"".to_string(), Some("loop".to_string()), 1),
+            Token::new(TokenType::Semicolon, ";".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        assert!(!parser.has_error);
+        assert_eq!(statements.len(), 1);
+        
+        match &statements[0] {
+            StmtEnum::While(while_stmt) => {
+                // Check condition
+                match while_stmt.condition.as_ref() {
+                    ExprEnum::Literal(l) => {
+                        match &l.value {
+                            LiteralValue::Boolean(b) => assert_eq!(*b, true),
+                            _ => panic!("Expected boolean literal"),
+                        }
+                    }
+                    _ => panic!("Expected Literal condition"),
+                }
+                
+                // Check body
+                match while_stmt.body.as_ref() {
+                    StmtEnum::Print(_) => {},
+                    _ => panic!("Expected Print statement body"),
+                }
+            }
+            _ => panic!("Expected While statement"),
+        }
     }
 }
 

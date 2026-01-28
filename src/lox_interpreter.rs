@@ -3255,6 +3255,83 @@ var netIncome = salary * (1 - taxRate);
         let val = interpreter.environment.borrow().borrow().get("a");
         assert_eq!(val.unwrap(), LoxValue::Number(2.0));
     }
+
+    #[test]
+    fn test_interpret_while_statement() {
+        use crate::lox_tokenizer::LoxTokenizer;
+        use crate::lox_parser::LoxParser;
+        
+        let source = "var a = 0; while (a < 3) a = a + 1;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        assert!(!tokenizer.had_error);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        assert!(!parser.has_error);
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        assert!(result.is_ok());
+        
+        let val = interpreter.environment.borrow().borrow().get("a");
+        assert_eq!(val.unwrap(), LoxValue::Number(3.0));
+    }
+
+    #[test]
+    fn test_interpret_while_loop_false_condition() {
+        use crate::lox_tokenizer::LoxTokenizer;
+        use crate::lox_parser::LoxParser;
+        
+        // var a = 10; while (false) a = 20;
+        let source = "var a = 10; while (false) a = 20;";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        assert!(!tokenizer.had_error);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        assert!(!parser.has_error);
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        assert!(result.is_ok());
+        
+        // a should remain 10
+        let val = interpreter.environment.borrow().borrow().get("a");
+        assert_eq!(val.unwrap(), LoxValue::Number(10.0));
+    }
+
+    #[test]
+    fn test_interpret_while_loop_with_block() {
+        use crate::lox_tokenizer::LoxTokenizer;
+        use crate::lox_parser::LoxParser;
+        
+        // var i = 0; var sum = 0; while (i < 3) { sum = sum + i; i = i + 1; }
+        // Iterations:
+        // i=0, sum=0 -> sum=0, i=1
+        // i=1, sum=0 -> sum=1, i=2
+        // i=2, sum=1 -> sum=3, i=3
+        // End
+        let source = "var i = 0; var sum = 0; while (i < 3) { sum = sum + i; i = i + 1; }";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        assert!(!tokenizer.had_error);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        assert!(!parser.has_error);
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        assert!(result.is_ok());
+        
+        let sum = interpreter.environment.borrow().borrow().get("sum");
+        assert_eq!(sum.unwrap(), LoxValue::Number(3.0));
+    }
 }
 
 // =============================================================================
@@ -3303,5 +3380,12 @@ impl stmt::Visitor<Result<(), RuntimeError>> for Interpreter {
         } else {
             Ok(())
         }
+    }
+
+    fn visit_while_stmt(&self, stmt: &stmt::WhileStmt) -> Result<(), RuntimeError> {
+        while Self::is_truthy(&self.evaluate(&stmt.condition)?) {
+            self.execute(&stmt.body)?;
+        }
+        Ok(())
     }
 }

@@ -21,6 +21,7 @@ pub enum StmtEnum {
     Var(VarStmt),
     Block(BlockStmt),
     If(IfStmt),
+    While(WhileStmt),
     None,
 }
 
@@ -33,6 +34,7 @@ impl StmtEnum {
             StmtEnum::Var(stmt) => visitor.visit_var_stmt(stmt),
             StmtEnum::Block(stmt) => visitor.visit_block_stmt(stmt),
             StmtEnum::If(stmt) => visitor.visit_if_stmt(stmt),
+            StmtEnum::While(stmt) => visitor.visit_while_stmt(stmt),
             StmtEnum::None => panic!("Invalid statement type"),
         }
     }
@@ -70,6 +72,12 @@ pub(crate) struct IfStmt {
     pub(crate) else_branch: Option<Box<StmtEnum>>,
 }
 
+// While statement: repeatedly executes a body statement while a condition is true
+pub(crate) struct WhileStmt {
+    pub(crate) condition: Box<ExprEnum>,
+    pub(crate) body: Box<StmtEnum>,
+}
+
 // Visitor trait for statements
 // Unlike expressions which return values, statements return a generic type T
 // (typically Result<(), String> for execution)
@@ -79,6 +87,7 @@ pub trait Visitor<T> {
     fn visit_var_stmt(&self, stmt: &VarStmt) -> T;
     fn visit_block_stmt(&self, stmt: &BlockStmt) -> T;
     fn visit_if_stmt(&self, stmt: &IfStmt) -> T;
+    fn visit_while_stmt(&self, stmt: &WhileStmt) -> T;
 }
 
 #[cfg(test)]
@@ -116,6 +125,10 @@ mod tests {
 
         fn visit_if_stmt(&self, _stmt: &IfStmt) -> String {
             "if-stmt".to_string()
+        }
+
+        fn visit_while_stmt(&self, _stmt: &WhileStmt) -> String {
+            "while-stmt".to_string()
         }
     }
 
@@ -435,5 +448,43 @@ mod tests {
         let printer = StmtPrinter;
         let result = stmt.accept(&printer);
         assert_eq!(result, "var-stmt");
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 11: WhileStmt creation
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_while_stmt_creation() {
+        use crate::expr::LiteralValue;
+        
+        let condition = Box::new(ExprEnum::Literal(Literal {
+            value: LiteralValue::Boolean(true),
+        }));
+        
+        let body = Box::new(StmtEnum::Expression(ExpressionStmt {
+            expression: Box::new(ExprEnum::Literal(Literal {
+                value: LiteralValue::Number(42.0),
+            })),
+        }));
+
+        let stmt = StmtEnum::While(WhileStmt {
+            condition,
+            body,
+        });
+
+        match stmt {
+            StmtEnum::While(while_stmt) => {
+                match while_stmt.condition.as_ref() {
+                    ExprEnum::Literal(l) => {
+                        match &l.value {
+                            LiteralValue::Boolean(b) => assert_eq!(*b, true),
+                            _ => panic!("Expected boolean literal"),
+                        }
+                    }
+                    _ => panic!("Expected Literal expression"),
+                }
+            }
+            _ => panic!("Expected While statement"),
+        }
     }
 }
