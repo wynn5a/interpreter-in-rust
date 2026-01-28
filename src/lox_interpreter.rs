@@ -3332,6 +3332,58 @@ var netIncome = salary * (1 - taxRate);
         let sum = interpreter.environment.borrow().borrow().get("sum");
         assert_eq!(sum.unwrap(), LoxValue::Number(3.0));
     }
+
+    #[test]
+    fn test_interpret_for_loop() {
+        use crate::lox_tokenizer::LoxTokenizer;
+        use crate::lox_parser::LoxParser;
+        
+        // for (var i = 0; i < 3; i = i + 1) { sum = sum + i; }
+        // i=0, sum=0 -> sum=0, i=1
+        // i=1, sum=0 -> sum=1, i=2
+        // i=2, sum=1 -> sum=3, i=3
+        // End
+        let source = "var sum = 0; for (var i = 0; i < 3; i = i + 1) { sum = sum + i; }";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        assert!(!tokenizer.had_error);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        assert!(!parser.has_error);
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        assert!(result.is_ok());
+        
+        let sum = interpreter.environment.borrow().borrow().get("sum");
+        assert_eq!(sum.unwrap(), LoxValue::Number(3.0));
+    }
+
+    #[test]
+    fn test_interpret_for_loop_no_init_increment() {
+        use crate::lox_tokenizer::LoxTokenizer;
+        use crate::lox_parser::LoxParser;
+        
+        // var i = 0; for (; i < 3;) { i = i + 1; }
+        let source = "var i = 0; for (; i < 3;) { i = i + 1; }";
+        
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        assert!(!tokenizer.had_error);
+        
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        assert!(!parser.has_error);
+        
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        assert!(result.is_ok());
+        
+        let i = interpreter.environment.borrow().borrow().get("i");
+        assert_eq!(i.unwrap(), LoxValue::Number(3.0));
+    }
 }
 
 // =============================================================================

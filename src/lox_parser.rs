@@ -112,6 +112,9 @@ impl LoxParser {
     }
 
     fn statement(&mut self) -> StmtEnum {
+        if self.match_tokens(&[For]) {
+            return self.for_statement();
+        }
         if self.match_tokens(&[If]) {
             return self.if_statement();
         }
@@ -137,6 +140,61 @@ impl LoxParser {
             condition,
             body,
         })
+    }
+
+    fn for_statement(&mut self) -> StmtEnum {
+        self.consume(LeftParen, "Expect '(' after 'for'.");
+
+        let initializer;
+        if self.match_tokens(&[Semicolon]) {
+            initializer = None;
+        } else if self.match_tokens(&[Var]) {
+            initializer = Some(self.var_declaration());
+        } else {
+            initializer = Some(self.expression_statement());
+        }
+
+        let mut condition = None;
+        if !self.check(Semicolon) {
+            condition = Some(self.expression());
+        }
+        self.consume(Semicolon, "Expect ';' after loop condition.");
+
+        let mut increment = None;
+        if !self.check(RightParen) {
+            increment = Some(self.expression());
+        }
+        self.consume(RightParen, "Expect ')' after for clauses.");
+
+        let mut body = self.statement();
+
+        if let Some(incr) = increment {
+            body = StmtEnum::Block(BlockStmt {
+                statements: vec![
+                    body,
+                    StmtEnum::Expression(ExpressionStmt { expression: incr }),
+                ],
+            });
+        }
+
+        if condition.is_none() {
+            condition = Some(Box::new(ExprEnum::Literal(Literal {
+                value: LiteralValue::Boolean(true),
+            })));
+        }
+
+        body = StmtEnum::While(crate::stmt::WhileStmt {
+            condition: condition.unwrap(),
+            body: Box::new(body),
+        });
+
+        if let Some(init) = initializer {
+            body = StmtEnum::Block(BlockStmt {
+                statements: vec![init, body],
+            });
+        }
+
+        body
     }
 
     fn if_statement(&mut self) -> StmtEnum {
@@ -1374,6 +1432,93 @@ mod tests {
                 }
             }
             _ => panic!("Expected While statement"),
+        }
+    }
+
+    #[test]
+    fn test_parse_for_statement() {
+        // for (var i = 0; i < 10; i = i + 1) print i;
+        // Should desugar to:
+        // {
+        //   var i = 0;
+        //   while (i < 10) {
+        //     print i;
+        //     i = i + 1;
+        //   }
+        // }
+        let tokens = vec![
+            Token::new(TokenType::For, "for".to_string(), None, 1),
+            Token::new(TokenType::LeftParen, "(".to_string(), None, 1),
+            Token::new(TokenType::Var, "var".to_string(), None, 1),
+            Token::new(TokenType::Identifier, "i".to_string(), None, 1),
+            Token::new(TokenType::Equal, "=".to_string(), None, 1),
+            Token::new(TokenType::Number, "0".to_string(), Some("0".to_string()), 1),
+            Token::new(TokenType::Semicolon, ";".to_string(), None, 1),
+            Token::new(TokenType::Identifier, "i".to_string(), None, 1),
+            Token::new(TokenType::Less, "<".to_string(), None, 1),
+            Token::new(TokenType::Number, "10".to_string(), Some("10".to_string()), 1),
+            Token::new(TokenType::Semicolon, ";".to_string(), None, 1),
+            Token::new(TokenType::Identifier, "i".to_string(), None, 1),
+            Token::new(TokenType::Equal, "=".to_string(), None, 1),
+            Token::new(TokenType::Identifier, "i".to_string(), None, 1),
+            Token::new(TokenType::Plus, "+".to_string(), None, 1),
+            Token::new(TokenType::Number, "1".to_string(), Some("1".to_string()), 1),
+            Token::new(TokenType::RightParen, ")".to_string(), None, 1),
+            Token::new(TokenType::Print, "print".to_string(), None, 1),
+            Token::new(TokenType::Identifier, "i".to_string(), None, 1),
+            Token::new(TokenType::Semicolon, ";".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        
+        // This should pass if for loops are implemented correctly
+        assert!(!parser.has_error);
+        
+        // Desugaring validation
+        // The result should be a BlockStmt containing the initializer and a WhileStmt
+        assert_eq!(statements.len(), 1);
+        
+        match &statements[0] {
+            StmtEnum::Block(block_stmt) => {
+                // Should have 2 statements: initializer and while loop
+                assert_eq!(block_stmt.statements.len(), 2);
+                
+                // 1. Initializer: var i = 0;
+                match &block_stmt.statements[0] {
+                    StmtEnum::Var(var_stmt) => {
+                        assert_eq!(var_stmt.name.lexeme, "i");
+                    }
+                    _ => panic!("Expected Var statement as initializer"),
+                }
+                
+                // 2. While loop
+                match &block_stmt.statements[1] {
+                    StmtEnum::While(while_stmt) => {
+                        // Condition: i < 10
+                        // Body should be a block containing the original body + increment
+                         match while_stmt.body.as_ref() {
+                            StmtEnum::Block(body_block) => {
+                                assert_eq!(body_block.statements.len(), 2);
+                                // Original body: print i;
+                                match &body_block.statements[0] {
+                                    StmtEnum::Print(_) => {},
+                                    _ => panic!("Expected Print statement in loop body"),
+                                }
+                                // Increment: i = i + 1;
+                                match &body_block.statements[1] {
+                                    StmtEnum::Expression(_) => {},
+                                    _ => panic!("Expected Expression statement (increment) in loop body"),
+                                }
+                            }
+                            _ => panic!("Expected Block body for While loop (to hold increment)"),
+                        }
+                    }
+                    _ => panic!("Expected While statement"),
+                }
+            }
+            _ => panic!("Expected Block statement (outer scope for 'for' loop)"),
         }
     }
 }
