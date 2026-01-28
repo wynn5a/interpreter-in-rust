@@ -137,11 +137,9 @@ mod tests {
         let expr = Box::new(ExprEnum::Literal(Literal {
             value: LiteralValue::Number(42.0),
         }));
-        
-        let stmt = StmtEnum::Expression(ExpressionStmt {
-            expression: expr,
-        });
-        
+
+        let stmt = StmtEnum::Expression(ExpressionStmt { expression: expr });
+
         let printer = StmtPrinter;
         let result = stmt.accept(&printer);
         assert_eq!(result, "expression-stmt");
@@ -152,11 +150,9 @@ mod tests {
         let expr = Box::new(ExprEnum::Literal(Literal {
             value: LiteralValue::String("hello".to_string()),
         }));
-        
-        let stmt = StmtEnum::Print(PrintStmt {
-            expression: expr,
-        });
-        
+
+        let stmt = StmtEnum::Print(PrintStmt { expression: expr });
+
         let printer = StmtPrinter;
         let result = stmt.accept(&printer);
         assert_eq!(result, "print-stmt");
@@ -165,7 +161,7 @@ mod tests {
     #[test]
     fn test_print_stmt_with_binary_expr() {
         use crate::expr::Binary;
-        
+
         let left = Box::new(ExprEnum::Literal(Literal {
             value: LiteralValue::Number(1.0),
         }));
@@ -173,17 +169,13 @@ mod tests {
             value: LiteralValue::Number(2.0),
         }));
         let op = Token::new(TokenType::Plus, "+".to_string(), None, 1);
-        
-        let binary_expr = Box::new(ExprEnum::Binary(Binary {
-            left,
-            op,
-            right,
-        }));
-        
+
+        let binary_expr = Box::new(ExprEnum::Binary(Binary { left, op, right }));
+
         let stmt = StmtEnum::Print(PrintStmt {
             expression: binary_expr,
         });
-        
+
         let printer = StmtPrinter;
         let result = stmt.accept(&printer);
         assert_eq!(result, "print-stmt");
@@ -308,7 +300,7 @@ mod tests {
         use crate::expr::Binary;
 
         let name_token = Token::new(TokenType::Identifier, "sum".to_string(), None, 1);
-        
+
         let left = Box::new(ExprEnum::Literal(Literal {
             value: LiteralValue::Number(10.0),
         }));
@@ -316,12 +308,8 @@ mod tests {
             value: LiteralValue::Number(20.0),
         }));
         let op = Token::new(TokenType::Plus, "+".to_string(), None, 1);
-        
-        let initializer = Box::new(ExprEnum::Binary(Binary {
-            left,
-            op,
-            right,
-        }));
+
+        let initializer = Box::new(ExprEnum::Binary(Binary { left, op, right }));
 
         let stmt = StmtEnum::Var(VarStmt {
             name: name_token,
@@ -359,10 +347,8 @@ mod tests {
 
         let name_token = Token::new(TokenType::Identifier, "copy".to_string(), None, 1);
         let source_token = Token::new(TokenType::Identifier, "original".to_string(), None, 1);
-        
-        let initializer = Box::new(ExprEnum::Variable(Variable {
-            name: source_token,
-        }));
+
+        let initializer = Box::new(ExprEnum::Variable(Variable { name: source_token }));
 
         let stmt = StmtEnum::Var(VarStmt {
             name: name_token,
@@ -409,7 +395,7 @@ mod tests {
         use crate::expr::{Binary, Grouping};
 
         let name_token = Token::new(TokenType::Identifier, "result".to_string(), None, 1);
-        
+
         // Expression: (1 + 2) * 3
         let inner_left = Box::new(ExprEnum::Literal(Literal {
             value: LiteralValue::Number(1.0),
@@ -418,7 +404,7 @@ mod tests {
             value: LiteralValue::Number(2.0),
         }));
         let plus_op = Token::new(TokenType::Plus, "+".to_string(), None, 1);
-        
+
         let inner_binary = Box::new(ExprEnum::Binary(Binary {
             left: inner_left,
             op: plus_op,
@@ -456,34 +442,27 @@ mod tests {
     #[test]
     fn test_while_stmt_creation() {
         use crate::expr::LiteralValue;
-        
+
         let condition = Box::new(ExprEnum::Literal(Literal {
             value: LiteralValue::Boolean(true),
         }));
-        
+
         let body = Box::new(StmtEnum::Expression(ExpressionStmt {
             expression: Box::new(ExprEnum::Literal(Literal {
                 value: LiteralValue::Number(42.0),
             })),
         }));
 
-        let stmt = StmtEnum::While(WhileStmt {
-            condition,
-            body,
-        });
+        let stmt = StmtEnum::While(WhileStmt { condition, body });
 
         match stmt {
-            StmtEnum::While(while_stmt) => {
-                match while_stmt.condition.as_ref() {
-                    ExprEnum::Literal(l) => {
-                        match &l.value {
-                            LiteralValue::Boolean(b) => assert_eq!(*b, true),
-                            _ => panic!("Expected boolean literal"),
-                        }
-                    }
-                    _ => panic!("Expected Literal expression"),
-                }
-            }
+            StmtEnum::While(while_stmt) => match while_stmt.condition.as_ref() {
+                ExprEnum::Literal(l) => match &l.value {
+                    LiteralValue::Boolean(b) => assert_eq!(*b, true),
+                    _ => panic!("Expected boolean literal"),
+                },
+                _ => panic!("Expected Literal expression"),
+            },
             _ => panic!("Expected While statement"),
         }
     }

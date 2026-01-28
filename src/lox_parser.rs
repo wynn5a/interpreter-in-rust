@@ -60,18 +60,18 @@ impl LoxParser {
     /// Parses a program, returning a list of statements.
     pub fn parse(&mut self) -> Vec<StmtEnum> {
         let mut statements = Vec::new();
-        
+
         while !self.is_at_end() {
             let start = self.current;
             statements.push(self.declaration());
-            
+
             // Panic mode recovery: if we didn't advance and have an error,
             // we must advance to avoid infinite loops.
             if self.current == start && self.has_error {
                 self.synchronize();
             }
         }
-        
+
         statements
     }
 
@@ -79,11 +79,13 @@ impl LoxParser {
         self.advance();
 
         while !self.is_at_end() {
-            if self.previous().token_type == Semicolon { return; }
+            if self.previous().token_type == Semicolon {
+                return;
+            }
 
             match self.peek().token_type {
                 Class | Fun | Var | For | If | While | Print | Return => return,
-                _ => {},
+                _ => {}
             }
 
             self.advance();
@@ -136,10 +138,7 @@ impl LoxParser {
         self.consume(RightParen, "Expect ')' after condition.");
         let body = Box::new(self.statement());
 
-        StmtEnum::While(crate::stmt::WhileStmt {
-            condition,
-            body,
-        })
+        StmtEnum::While(crate::stmt::WhileStmt { condition, body })
     }
 
     fn for_statement(&mut self) -> StmtEnum {
@@ -299,37 +298,25 @@ impl LoxParser {
     }
 
     fn equality(&mut self) -> Box<ExprEnum> {
-        self.parse_binary_left_assoc(
-            &[BangEqual, EqualEqual],
-            Self::comparison
-        )
+        self.parse_binary_left_assoc(&[BangEqual, EqualEqual], Self::comparison)
     }
 
     fn comparison(&mut self) -> Box<ExprEnum> {
-        self.parse_binary_left_assoc(
-            &[Greater, GreaterEqual, Less, LessEqual],
-            Self::term
-        )
+        self.parse_binary_left_assoc(&[Greater, GreaterEqual, Less, LessEqual], Self::term)
     }
 
     fn term(&mut self) -> Box<ExprEnum> {
-        self.parse_binary_left_assoc(
-            &[Minus, Plus],
-            Self::factor
-        )
+        self.parse_binary_left_assoc(&[Minus, Plus], Self::factor)
     }
 
     fn factor(&mut self) -> Box<ExprEnum> {
-        self.parse_binary_left_assoc(
-            &[Slash, Star],
-            Self::unary
-        )
+        self.parse_binary_left_assoc(&[Slash, Star], Self::unary)
     }
 
     fn parse_binary_left_assoc(
         &mut self,
         operators: &[TokenType],
-        operand_parser: fn(&mut Self) -> Box<ExprEnum>
+        operand_parser: fn(&mut Self) -> Box<ExprEnum>,
     ) -> Box<ExprEnum> {
         let mut expr = operand_parser(self);
 
@@ -353,7 +340,10 @@ impl LoxParser {
 
         let operator = self.previous();
         let right = self.unary();
-        Box::new(ExprEnum::Unary(Unary { op: operator, right }))
+        Box::new(ExprEnum::Unary(Unary {
+            op: operator,
+            right,
+        }))
     }
 
     fn primary(&mut self) -> Box<ExprEnum> {
@@ -488,7 +478,7 @@ mod tests {
     }
 
     #[test]
-    fn test_error(){
+    fn test_error() {
         // let tokens = vec![
         //     Token::new(LeftParen, "(".to_string(), Some("(".to_string()), 1),
         //     Token::new(Identifier, "foo".to_string(), Some("foo".to_string()), 1),
@@ -600,17 +590,22 @@ mod tests {
     fn test_parse_print_statement() {
         let tokens = vec![
             Token::new(TokenType::Print, "print".to_string(), None, 1),
-            Token::new(TokenType::Number, "42".to_string(), Some("42".to_string()), 1),
+            Token::new(
+                TokenType::Number,
+                "42".to_string(),
+                Some("42".to_string()),
+                1,
+            ),
             Token::new(Semicolon, ";".to_string(), None, 1),
             Token::new(TokenType::Eof, "".to_string(), None, 1),
         ];
 
         let mut parser = LoxParser::new(tokens);
         let statements = parser.parse();
-        
+
         assert!(!parser.has_error);
         assert_eq!(statements.len(), 1);
-        
+
         match &statements[0] {
             StmtEnum::Print(print_stmt) => {
                 // Verify it's a print statement with a literal 42
@@ -628,7 +623,12 @@ mod tests {
     #[test]
     fn test_parse_expression_statement() {
         let tokens = vec![
-            Token::new(TokenType::Number, "42".to_string(), Some("42".to_string()), 1),
+            Token::new(
+                TokenType::Number,
+                "42".to_string(),
+                Some("42".to_string()),
+                1,
+            ),
             Token::new(TokenType::Plus, "+".to_string(), None, 1),
             Token::new(TokenType::Number, "1".to_string(), Some("1".to_string()), 1),
             Token::new(Semicolon, ";".to_string(), None, 1),
@@ -637,10 +637,10 @@ mod tests {
 
         let mut parser = LoxParser::new(tokens);
         let statements = parser.parse();
-        
+
         assert!(!parser.has_error);
         assert_eq!(statements.len(), 1);
-        
+
         match &statements[0] {
             StmtEnum::Expression(expr_stmt) => {
                 // Verify it's an expression statement with a binary expression
@@ -669,29 +669,34 @@ mod tests {
             Token::new(TokenType::Number, "3".to_string(), Some("3".to_string()), 2),
             Token::new(Semicolon, ";".to_string(), None, 2),
             // 42;
-            Token::new(TokenType::Number, "42".to_string(), Some("42".to_string()), 3),
+            Token::new(
+                TokenType::Number,
+                "42".to_string(),
+                Some("42".to_string()),
+                3,
+            ),
             Token::new(Semicolon, ";".to_string(), None, 3),
             Token::new(TokenType::Eof, "".to_string(), None, 3),
         ];
 
         let mut parser = LoxParser::new(tokens);
         let statements = parser.parse();
-        
+
         assert!(!parser.has_error);
         assert_eq!(statements.len(), 3);
-        
+
         // First statement should be print
         match &statements[0] {
             StmtEnum::Print(_) => {}
             _ => panic!("Expected first statement to be print"),
         }
-        
+
         // Second statement should be print
         match &statements[1] {
             StmtEnum::Print(_) => {}
             _ => panic!("Expected second statement to be print"),
         }
-        
+
         // Third statement should be expression
         match &statements[2] {
             StmtEnum::Expression(_) => {}
@@ -731,7 +736,6 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_variable_in_binary() {
-        
         // Tokens for: a + 1
         let tokens = vec![
             Token::new(TokenType::Identifier, "a".to_string(), None, 1),
@@ -753,10 +757,10 @@ mod tests {
                     }
                     _ => panic!("Expected left to be Variable"),
                 }
-                
+
                 // Operator should be Plus
                 assert_eq!(binary.op.token_type, TokenType::Plus);
-                
+
                 // Right should be Literal number
                 match binary.right.as_ref() {
                     ExprEnum::Literal(_) => {}
@@ -772,7 +776,6 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_two_variables_in_binary() {
-        
         // Tokens for: x + y
         let tokens = vec![
             Token::new(TokenType::Identifier, "x".to_string(), None, 1),
@@ -794,7 +797,7 @@ mod tests {
                     }
                     _ => panic!("Expected left to be Variable"),
                 }
-                
+
                 // Right should be Variable 'y'
                 match binary.right.as_ref() {
                     ExprEnum::Variable(var) => {
@@ -812,7 +815,6 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_variable_in_grouping() {
-        
         // Tokens for: (x)
         let tokens = vec![
             Token::new(TokenType::LeftParen, "(".to_string(), None, 1),
@@ -826,14 +828,12 @@ mod tests {
 
         // Should be a Grouping containing Variable
         match expr.as_ref() {
-            ExprEnum::Grouping(grouping) => {
-                match grouping.expression.as_ref() {
-                    ExprEnum::Variable(var) => {
-                        assert_eq!(var.name.lexeme, "x");
-                    }
-                    _ => panic!("Expected inner expression to be Variable"),
+            ExprEnum::Grouping(grouping) => match grouping.expression.as_ref() {
+                ExprEnum::Variable(var) => {
+                    assert_eq!(var.name.lexeme, "x");
                 }
-            }
+                _ => panic!("Expected inner expression to be Variable"),
+            },
             _ => panic!("Expected Grouping expression"),
         }
     }
@@ -843,7 +843,6 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_variable_in_unary() {
-        
         // Tokens for: -x
         let tokens = vec![
             Token::new(TokenType::Minus, "-".to_string(), None, 1),
@@ -858,7 +857,7 @@ mod tests {
         match expr.as_ref() {
             ExprEnum::Unary(unary) => {
                 assert_eq!(unary.op.token_type, TokenType::Minus);
-                
+
                 match unary.right.as_ref() {
                     ExprEnum::Variable(var) => {
                         assert_eq!(var.name.lexeme, "x");
@@ -875,7 +874,6 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_complex_expression_with_variables() {
-        
         // Tokens for: a * b + c
         let tokens = vec![
             Token::new(TokenType::Identifier, "a".to_string(), None, 1),
@@ -893,12 +891,12 @@ mod tests {
         match expr.as_ref() {
             ExprEnum::Binary(plus_expr) => {
                 assert_eq!(plus_expr.op.token_type, TokenType::Plus);
-                
+
                 // Left should be (* a b)
                 match plus_expr.left.as_ref() {
                     ExprEnum::Binary(star_expr) => {
                         assert_eq!(star_expr.op.token_type, TokenType::Star);
-                        
+
                         // Both operands should be Variables
                         match star_expr.left.as_ref() {
                             ExprEnum::Variable(var) => assert_eq!(var.name.lexeme, "a"),
@@ -911,7 +909,7 @@ mod tests {
                     }
                     _ => panic!("Expected left to be Binary expression"),
                 }
-                
+
                 // Right should be Variable 'c'
                 match plus_expr.right.as_ref() {
                     ExprEnum::Variable(var) => assert_eq!(var.name.lexeme, "c"),
@@ -952,7 +950,6 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_parse_comparison_with_variables() {
-        
         // Tokens for: x > y
         let tokens = vec![
             Token::new(TokenType::Identifier, "x".to_string(), None, 1),
@@ -967,7 +964,7 @@ mod tests {
         match expr.as_ref() {
             ExprEnum::Binary(binary) => {
                 assert_eq!(binary.op.token_type, TokenType::Greater);
-                
+
                 // Both sides should be Variables
                 match binary.left.as_ref() {
                     ExprEnum::Variable(var) => assert_eq!(var.name.lexeme, "x"),
@@ -996,7 +993,12 @@ mod tests {
             Token::new(TokenType::Var, "var".to_string(), None, 1),
             Token::new(TokenType::Identifier, "x".to_string(), None, 1),
             Token::new(TokenType::Equal, "=".to_string(), None, 1),
-            Token::new(TokenType::Number, "42".to_string(), Some("42".to_string()), 1),
+            Token::new(
+                TokenType::Number,
+                "42".to_string(),
+                Some("42".to_string()),
+                1,
+            ),
             Token::new(TokenType::Semicolon, ";".to_string(), None, 1),
             Token::new(TokenType::Eof, "".to_string(), None, 1),
         ];
@@ -1005,7 +1007,7 @@ mod tests {
         let statements = parser.parse();
 
         assert_eq!(statements.len(), 1);
-        
+
         match &statements[0] {
             StmtEnum::Var(var_stmt) => {
                 assert_eq!(var_stmt.name.lexeme, "x");
@@ -1032,7 +1034,7 @@ mod tests {
         let statements = parser.parse();
 
         assert_eq!(statements.len(), 1);
-        
+
         match &statements[0] {
             StmtEnum::Var(var_stmt) => {
                 assert_eq!(var_stmt.name.lexeme, "y");
@@ -1052,7 +1054,12 @@ mod tests {
             Token::new(TokenType::Var, "var".to_string(), None, 1),
             Token::new(TokenType::Identifier, "name".to_string(), None, 1),
             Token::new(TokenType::Equal, "=".to_string(), None, 1),
-            Token::new(TokenType::String, "\"Alice\"".to_string(), Some("Alice".to_string()), 1),
+            Token::new(
+                TokenType::String,
+                "\"Alice\"".to_string(),
+                Some("Alice".to_string()),
+                1,
+            ),
             Token::new(TokenType::Semicolon, ";".to_string(), None, 1),
             Token::new(TokenType::Eof, "".to_string(), None, 1),
         ];
@@ -1061,7 +1068,7 @@ mod tests {
         let statements = parser.parse();
 
         assert_eq!(statements.len(), 1);
-        
+
         match &statements[0] {
             StmtEnum::Var(var_stmt) => {
                 assert_eq!(var_stmt.name.lexeme, "name");
@@ -1092,12 +1099,12 @@ mod tests {
         let statements = parser.parse();
 
         assert_eq!(statements.len(), 1);
-        
+
         match &statements[0] {
             StmtEnum::Var(var_stmt) => {
                 assert_eq!(var_stmt.name.lexeme, "sum");
                 assert!(var_stmt.initializer.is_some());
-                
+
                 // Check that initializer is a Binary expression
                 match var_stmt.initializer.as_ref().unwrap().as_ref() {
                     ExprEnum::Binary(_) => {}
@@ -1123,17 +1130,14 @@ mod tests {
             Token::new(TokenType::Equal, "=".to_string(), None, 1),
             Token::new(TokenType::Number, "1".to_string(), Some("1".to_string()), 1),
             Token::new(TokenType::Semicolon, ";".to_string(), None, 1),
-            
             Token::new(TokenType::Var, "var".to_string(), None, 2),
             Token::new(TokenType::Identifier, "b".to_string(), None, 2),
             Token::new(TokenType::Equal, "=".to_string(), None, 2),
             Token::new(TokenType::Number, "2".to_string(), Some("2".to_string()), 2),
             Token::new(TokenType::Semicolon, ";".to_string(), None, 2),
-            
             Token::new(TokenType::Var, "var".to_string(), None, 3),
             Token::new(TokenType::Identifier, "c".to_string(), None, 3),
             Token::new(TokenType::Semicolon, ";".to_string(), None, 3),
-            
             Token::new(TokenType::Eof, "".to_string(), None, 3),
         ];
 
@@ -1141,7 +1145,7 @@ mod tests {
         let statements = parser.parse();
 
         assert_eq!(statements.len(), 3);
-        
+
         // First var
         match &statements[0] {
             StmtEnum::Var(var_stmt) => {
@@ -1150,7 +1154,7 @@ mod tests {
             }
             _ => panic!("Expected Var statement"),
         }
-        
+
         // Second var
         match &statements[1] {
             StmtEnum::Var(var_stmt) => {
@@ -1159,7 +1163,7 @@ mod tests {
             }
             _ => panic!("Expected Var statement"),
         }
-        
+
         // Third var
         match &statements[2] {
             StmtEnum::Var(var_stmt) => {
@@ -1189,12 +1193,12 @@ mod tests {
         let statements = parser.parse();
 
         assert_eq!(statements.len(), 1);
-        
+
         match &statements[0] {
             StmtEnum::Var(var_stmt) => {
                 assert_eq!(var_stmt.name.lexeme, "copy");
                 assert!(var_stmt.initializer.is_some());
-                
+
                 // Check that initializer is a Variable expression
                 match var_stmt.initializer.as_ref().unwrap().as_ref() {
                     ExprEnum::Variable(var) => {
@@ -1220,19 +1224,26 @@ mod tests {
             Token::new(TokenType::Var, "var".to_string(), None, 1),
             Token::new(TokenType::Identifier, "x".to_string(), None, 1),
             Token::new(TokenType::Equal, "=".to_string(), None, 1),
-            Token::new(TokenType::Number, "10".to_string(), Some("10".to_string()), 1),
+            Token::new(
+                TokenType::Number,
+                "10".to_string(),
+                Some("10".to_string()),
+                1,
+            ),
             Token::new(TokenType::Semicolon, ";".to_string(), None, 1),
-            
             Token::new(TokenType::Print, "print".to_string(), None, 2),
             Token::new(TokenType::Identifier, "x".to_string(), None, 2),
             Token::new(TokenType::Semicolon, ";".to_string(), None, 2),
-            
             Token::new(TokenType::Var, "var".to_string(), None, 3),
             Token::new(TokenType::Identifier, "y".to_string(), None, 3),
             Token::new(TokenType::Equal, "=".to_string(), None, 3),
-            Token::new(TokenType::Number, "20".to_string(), Some("20".to_string()), 3),
+            Token::new(
+                TokenType::Number,
+                "20".to_string(),
+                Some("20".to_string()),
+                3,
+            ),
             Token::new(TokenType::Semicolon, ";".to_string(), None, 3),
-            
             Token::new(TokenType::Eof, "".to_string(), None, 3),
         ];
 
@@ -1240,7 +1251,7 @@ mod tests {
         let statements = parser.parse();
 
         assert_eq!(statements.len(), 3);
-        
+
         // First: var x = 10;
         match &statements[0] {
             StmtEnum::Var(var_stmt) => {
@@ -1248,13 +1259,13 @@ mod tests {
             }
             _ => panic!("Expected Var statement"),
         }
-        
+
         // Second: print x;
         match &statements[1] {
             StmtEnum::Print(_) => {}
             _ => panic!("Expected Print statement"),
         }
-        
+
         // Third: var y = 20;
         match &statements[2] {
             StmtEnum::Var(var_stmt) => {
@@ -1283,7 +1294,7 @@ mod tests {
         let statements = parser.parse();
 
         assert_eq!(statements.len(), 1);
-        
+
         match &statements[0] {
             StmtEnum::Var(var_stmt) => {
                 assert_eq!(var_stmt.name.lexeme, "flag");
@@ -1318,7 +1329,7 @@ mod tests {
         let statements = parser.parse();
 
         assert_eq!(statements.len(), 1);
-        
+
         match &statements[0] {
             StmtEnum::Var(var_stmt) => {
                 assert_eq!(var_stmt.name.lexeme, "result");
@@ -1333,7 +1344,12 @@ mod tests {
         let tokens = vec![
             Token::new(TokenType::Nil, "nil".to_string(), None, 1),
             Token::new(TokenType::Or, "or".to_string(), None, 1),
-            Token::new(TokenType::String, "\"ok\"".to_string(), Some("ok".to_string()), 1),
+            Token::new(
+                TokenType::String,
+                "\"ok\"".to_string(),
+                Some("ok".to_string()),
+                1,
+            ),
             Token::new(TokenType::Eof, "".to_string(), None, 1),
         ];
 
@@ -1401,33 +1417,36 @@ mod tests {
             Token::new(TokenType::True, "true".to_string(), None, 1),
             Token::new(TokenType::RightParen, ")".to_string(), None, 1),
             Token::new(TokenType::Print, "print".to_string(), None, 1),
-            Token::new(TokenType::String, "\"loop\"".to_string(), Some("loop".to_string()), 1),
+            Token::new(
+                TokenType::String,
+                "\"loop\"".to_string(),
+                Some("loop".to_string()),
+                1,
+            ),
             Token::new(TokenType::Semicolon, ";".to_string(), None, 1),
             Token::new(TokenType::Eof, "".to_string(), None, 1),
         ];
 
         let mut parser = LoxParser::new(tokens);
         let statements = parser.parse();
-        
+
         assert!(!parser.has_error);
         assert_eq!(statements.len(), 1);
-        
+
         match &statements[0] {
             StmtEnum::While(while_stmt) => {
                 // Check condition
                 match while_stmt.condition.as_ref() {
-                    ExprEnum::Literal(l) => {
-                        match &l.value {
-                            LiteralValue::Boolean(b) => assert_eq!(*b, true),
-                            _ => panic!("Expected boolean literal"),
-                        }
-                    }
+                    ExprEnum::Literal(l) => match &l.value {
+                        LiteralValue::Boolean(b) => assert_eq!(*b, true),
+                        _ => panic!("Expected boolean literal"),
+                    },
                     _ => panic!("Expected Literal condition"),
                 }
-                
+
                 // Check body
                 match while_stmt.body.as_ref() {
-                    StmtEnum::Print(_) => {},
+                    StmtEnum::Print(_) => {}
                     _ => panic!("Expected Print statement body"),
                 }
             }
@@ -1456,7 +1475,12 @@ mod tests {
             Token::new(TokenType::Semicolon, ";".to_string(), None, 1),
             Token::new(TokenType::Identifier, "i".to_string(), None, 1),
             Token::new(TokenType::Less, "<".to_string(), None, 1),
-            Token::new(TokenType::Number, "10".to_string(), Some("10".to_string()), 1),
+            Token::new(
+                TokenType::Number,
+                "10".to_string(),
+                Some("10".to_string()),
+                1,
+            ),
             Token::new(TokenType::Semicolon, ";".to_string(), None, 1),
             Token::new(TokenType::Identifier, "i".to_string(), None, 1),
             Token::new(TokenType::Equal, "=".to_string(), None, 1),
@@ -1472,19 +1496,19 @@ mod tests {
 
         let mut parser = LoxParser::new(tokens);
         let statements = parser.parse();
-        
+
         // This should pass if for loops are implemented correctly
         assert!(!parser.has_error);
-        
+
         // Desugaring validation
         // The result should be a BlockStmt containing the initializer and a WhileStmt
         assert_eq!(statements.len(), 1);
-        
+
         match &statements[0] {
             StmtEnum::Block(block_stmt) => {
                 // Should have 2 statements: initializer and while loop
                 assert_eq!(block_stmt.statements.len(), 2);
-                
+
                 // 1. Initializer: var i = 0;
                 match &block_stmt.statements[0] {
                     StmtEnum::Var(var_stmt) => {
@@ -1492,24 +1516,26 @@ mod tests {
                     }
                     _ => panic!("Expected Var statement as initializer"),
                 }
-                
+
                 // 2. While loop
                 match &block_stmt.statements[1] {
                     StmtEnum::While(while_stmt) => {
                         // Condition: i < 10
                         // Body should be a block containing the original body + increment
-                         match while_stmt.body.as_ref() {
+                        match while_stmt.body.as_ref() {
                             StmtEnum::Block(body_block) => {
                                 assert_eq!(body_block.statements.len(), 2);
                                 // Original body: print i;
                                 match &body_block.statements[0] {
-                                    StmtEnum::Print(_) => {},
+                                    StmtEnum::Print(_) => {}
                                     _ => panic!("Expected Print statement in loop body"),
                                 }
                                 // Increment: i = i + 1;
                                 match &body_block.statements[1] {
-                                    StmtEnum::Expression(_) => {},
-                                    _ => panic!("Expected Expression statement (increment) in loop body"),
+                                    StmtEnum::Expression(_) => {}
+                                    _ => panic!(
+                                        "Expected Expression statement (increment) in loop body"
+                                    ),
                                 }
                             }
                             _ => panic!("Expected Block body for While loop (to hold increment)"),
@@ -1522,4 +1548,3 @@ mod tests {
         }
     }
 }
-

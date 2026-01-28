@@ -12,10 +12,10 @@
 //
 // =============================================================================
 
-use std::collections::HashMap;
 use crate::lox_interpreter::LoxValue;
-use std::rc::Rc;
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 /// Environment stores variable bindings (name -> value mappings).
 /// It supports lexical scoping via an optional enclosing environment.
@@ -66,9 +66,9 @@ impl Environment {
     /// Assigns a value to an existing variable.
     /// Searches the scope chain for the variable.
     /// Returns an error if the variable is not defined.
-    pub fn assign(&mut self, name: String, value: LoxValue) -> Result<(), String> {
-        if self.values.contains_key(&name) {
-            self.values.insert(name, value);
+    pub fn assign(&mut self, name: &str, value: LoxValue) -> Result<(), String> {
+        if let Some(target) = self.values.get_mut(name) {
+            *target = value;
             Ok(())
         } else if let Some(enclosing) = &self.enclosing {
             enclosing.borrow_mut().assign(name, value)
@@ -125,7 +125,7 @@ mod tests {
     fn test_environment_assign_existing() {
         let mut env = Environment::new();
         env.define("a".to_string(), LoxValue::Number(1.0));
-        let result = env.assign("a".to_string(), LoxValue::Number(2.0));
+        let result = env.assign("a", LoxValue::Number(2.0));
         assert!(result.is_ok());
         assert_eq!(env.get("a").unwrap(), LoxValue::Number(2.0));
     }
@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn test_environment_assign_undefined() {
         let mut env = Environment::new();
-        let result = env.assign("undefined".to_string(), LoxValue::Number(1.0));
+        let result = env.assign("undefined", LoxValue::Number(1.0));
         assert!(result.is_err());
     }
 }

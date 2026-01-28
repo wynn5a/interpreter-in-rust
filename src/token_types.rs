@@ -52,7 +52,7 @@ pub enum TokenType {
     Var,
     While,
 
-    Eof
+    Eof,
 }
 
 impl fmt::Display for TokenType {

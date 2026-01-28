@@ -1,9 +1,9 @@
-use clap::{Parser, Subcommand};
 use crate::expr::AstPrinter;
 use crate::lox_interpreter::Interpreter;
 use crate::lox_tokenizer::LoxTokenizer;
+use crate::token::Token;
+use clap::{Parser, Subcommand};
 use std::fs;
-use std::io::{self, Write};
 use std::process;
 
 mod environment;
@@ -30,100 +30,93 @@ enum Commands {
     Run { filename: String },
 }
 
+fn tokenize_or_exit(contents: &str) -> Vec<Token> {
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(contents);
+    if tokenizer.had_error {
+        process::exit(65);
+    }
+    tokens
+}
+
+fn log_tokens_to_stderr(tokens: &[Token]) {
+    for token in tokens {
+        eprintln!("{}", token);
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
     let filename = match &cli.command {
-        Commands::Tokenize { filename } => filename,
-        Commands::Parse { filename } => filename,
-        Commands::Evaluate { filename } => filename,
-        Commands::Run { filename } => filename,
+        Commands::Tokenize { filename }
+        | Commands::Parse { filename }
+        | Commands::Evaluate { filename }
+        | Commands::Run { filename } => filename,
     };
 
     let file_contents = read_file(filename);
     if file_contents.is_empty() {
-        writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+        eprintln!("Failed to read file {}", filename);
         process::exit(74);
     }
 
-    writeln!(io::stderr(), "Read file with content: {} \n\n", file_contents).unwrap();
+    eprintln!("Read file with content: {} \n\n", file_contents);
 
     match cli.command {
         Commands::Tokenize { .. } => {
             let mut tokenizer = LoxTokenizer::default();
-            let result = tokenizer.tokenize(&file_contents);
-            for token in result {
-                writeln!(io::stdout(), "{}", token).unwrap();
+            let tokens = tokenizer.tokenize(&file_contents);
+            for token in &tokens {
+                println!("{}", token);
             }
             if tokenizer.had_error {
-                process::exit(65)
-            };
+                process::exit(65);
+            }
         }
         Commands::Parse { .. } => {
-            let mut lox_tokenizer = LoxTokenizer::default();
-            let tokens = lox_tokenizer.tokenize(&file_contents);
-            if lox_tokenizer.had_error {
-                process::exit(65)
-            }
-            for token in tokens.clone() {
-                writeln!(io::stderr(), "{}", token).unwrap();
-            }
+            let tokens = tokenize_or_exit(&file_contents);
+            log_tokens_to_stderr(&tokens);
+
             let mut parser = lox_parser::LoxParser::new(tokens);
-            let expr = parser.parse_expression(); // Still use expression parsing for now
+            let expr = parser.parse_expression();
             if parser.has_error {
                 process::exit(65);
             }
             println!("{}", expr.accept(&AstPrinter {}));
         }
         Commands::Evaluate { .. } => {
-            let mut lox_tokenizer = LoxTokenizer::default();
-            let tokens = lox_tokenizer.tokenize(&file_contents);
-            if lox_tokenizer.had_error {
-                process::exit(65)
-            }
-            for token in tokens.clone() {
-                writeln!(io::stderr(), "{}", token).unwrap();
-            }
+            let tokens = tokenize_or_exit(&file_contents);
+            log_tokens_to_stderr(&tokens);
+
             let mut parser = lox_parser::LoxParser::new(tokens);
-            let expr = parser.parse_expression(); // Use expression parsing
+            let expr = parser.parse_expression();
             if parser.has_error {
                 process::exit(65);
             }
-            
-            // Create interpreter and evaluate expression
+
             let interpreter = Interpreter::new();
             match interpreter.evaluate(&expr) {
-                Ok(value) => {
-                    println!("{}", value);
-                }
+                Ok(value) => println!("{}", value),
                 Err(error) => {
-                    writeln!(io::stderr(), "{}", error).unwrap();
+                    eprintln!("{}", error);
                     process::exit(70);
                 }
             }
         }
         Commands::Run { .. } => {
-            let mut lox_tokenizer = LoxTokenizer::default();
-            let tokens = lox_tokenizer.tokenize(&file_contents);
-            if lox_tokenizer.had_error {
-                process::exit(65)
-            }
+            let tokens = tokenize_or_exit(&file_contents);
+
             let mut parser = lox_parser::LoxParser::new(tokens);
-            let statements = parser.parse(); // Use statement-based parsing
+            let statements = parser.parse();
             if parser.has_error {
                 process::exit(65);
             }
-            
-            // Create interpreter and execute statements
+
             let interpreter = Interpreter::new();
-            match interpreter.interpret(&statements) {
-                Ok(()) => {
-                    // Successful execution - output was produced via print statements
-                }
-                Err(error) => {
-                    writeln!(io::stderr(), "{}", error).unwrap();
-                    process::exit(70);
-                }
+            if let Err(error) = interpreter.interpret(&statements) {
+                eprintln!("{}", error);
+                process::exit(70);
             }
         }
     }
@@ -131,7 +124,7 @@ fn main() {
 
 fn read_file(filename: &String) -> String {
     fs::read_to_string(filename).unwrap_or_else(|_| {
-        writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+        eprintln!("Failed to read file {}", filename);
         String::new()
     })
 }

@@ -105,7 +105,12 @@ impl Visitor<String> for AstPrinter {
     }
 
     fn visit_binary(&self, expr: &Binary) -> String {
-        format!("({} {} {})", expr.op.lexeme, expr.left.accept(self), expr.right.accept(self))
+        format!(
+            "({} {} {})",
+            expr.op.lexeme,
+            expr.left.accept(self),
+            expr.right.accept(self)
+        )
     }
 
     fn visit_literal(&self, expr: &Literal) -> String {
@@ -122,7 +127,12 @@ impl Visitor<String> for AstPrinter {
     }
 
     fn visit_logical(&self, expr: &Logical) -> String {
-        format!("({} {} {})", expr.op.lexeme, expr.left.accept(self), expr.right.accept(self))
+        format!(
+            "({} {} {})",
+            expr.op.lexeme,
+            expr.left.accept(self),
+            expr.right.accept(self)
+        )
     }
 
     fn visit_unary(&self, expr: &Unary) -> String {
@@ -225,7 +235,7 @@ mod tests {
     #[test]
     fn test_variable_expr_creation() {
         let token = Token::new(TokenType::Identifier, "x".to_string(), None, 1);
-        
+
         let expr = ExprEnum::Variable(Variable {
             name: token.clone(),
         });
@@ -246,14 +256,12 @@ mod tests {
     #[test]
     fn test_ast_printer_variable() {
         let token = Token::new(TokenType::Identifier, "myVar".to_string(), None, 1);
-        
-        let expr = ExprEnum::Variable(Variable {
-            name: token,
-        });
+
+        let expr = ExprEnum::Variable(Variable { name: token });
 
         let ast_printer = AstPrinter {};
         let result = expr.accept(&ast_printer);
-        
+
         // Should print the variable name
         assert_eq!(result, "myVar");
     }
@@ -266,11 +274,9 @@ mod tests {
         // Expression: a + 1
         let var_token = Token::new(TokenType::Identifier, "a".to_string(), None, 1);
         let plus_token = Token::new(TokenType::Plus, "+".to_string(), None, 1);
-        
+
         let expr = ExprEnum::Binary(Binary {
-            left: Box::new(ExprEnum::Variable(Variable {
-                name: var_token,
-            })),
+            left: Box::new(ExprEnum::Variable(Variable { name: var_token })),
             op: plus_token,
             right: Box::new(ExprEnum::Literal(Literal {
                 value: LiteralValue::Number(1.0),
@@ -279,7 +285,7 @@ mod tests {
 
         let ast_printer = AstPrinter {};
         let result = expr.accept(&ast_printer);
-        
+
         // Should print: (+ a 1)
         assert_eq!(result, "(+ a 1)");
     }
@@ -293,20 +299,16 @@ mod tests {
         let x_token = Token::new(TokenType::Identifier, "x".to_string(), None, 1);
         let y_token = Token::new(TokenType::Identifier, "y".to_string(), None, 1);
         let plus_token = Token::new(TokenType::Plus, "+".to_string(), None, 1);
-        
+
         let expr = ExprEnum::Binary(Binary {
-            left: Box::new(ExprEnum::Variable(Variable {
-                name: x_token,
-            })),
+            left: Box::new(ExprEnum::Variable(Variable { name: x_token })),
             op: plus_token,
-            right: Box::new(ExprEnum::Variable(Variable {
-                name: y_token,
-            })),
+            right: Box::new(ExprEnum::Variable(Variable { name: y_token })),
         });
 
         let ast_printer = AstPrinter {};
         let result = expr.accept(&ast_printer);
-        
+
         // Should print: (+ x y)
         assert_eq!(result, "(+ x y)");
     }
@@ -318,16 +320,14 @@ mod tests {
     fn test_ast_printer_variable_in_grouping() {
         // Expression: (x)
         let x_token = Token::new(TokenType::Identifier, "x".to_string(), None, 1);
-        
+
         let expr = ExprEnum::Grouping(Grouping {
-            expression: Box::new(ExprEnum::Variable(Variable {
-                name: x_token,
-            })),
+            expression: Box::new(ExprEnum::Variable(Variable { name: x_token })),
         });
 
         let ast_printer = AstPrinter {};
         let result = expr.accept(&ast_printer);
-        
+
         // Should print: (group x)
         assert_eq!(result, "(group x)");
     }
@@ -340,17 +340,15 @@ mod tests {
         // Expression: -x
         let x_token = Token::new(TokenType::Identifier, "x".to_string(), None, 1);
         let minus_token = Token::new(TokenType::Minus, "-".to_string(), None, 1);
-        
+
         let expr = ExprEnum::Unary(Unary {
             op: minus_token,
-            right: Box::new(ExprEnum::Variable(Variable {
-                name: x_token,
-            })),
+            right: Box::new(ExprEnum::Variable(Variable { name: x_token })),
         });
 
         let ast_printer = AstPrinter {};
         let result = expr.accept(&ast_printer);
-        
+
         // Should print: (- x)
         assert_eq!(result, "(- x)");
     }
@@ -366,28 +364,22 @@ mod tests {
         let c_token = Token::new(TokenType::Identifier, "c".to_string(), None, 1);
         let plus_token = Token::new(TokenType::Plus, "+".to_string(), None, 1);
         let star_token = Token::new(TokenType::Star, "*".to_string(), None, 1);
-        
+
         let expr = ExprEnum::Binary(Binary {
             left: Box::new(ExprEnum::Grouping(Grouping {
                 expression: Box::new(ExprEnum::Binary(Binary {
-                    left: Box::new(ExprEnum::Variable(Variable {
-                        name: a_token,
-                    })),
+                    left: Box::new(ExprEnum::Variable(Variable { name: a_token })),
                     op: plus_token,
-                    right: Box::new(ExprEnum::Variable(Variable {
-                        name: b_token,
-                    })),
+                    right: Box::new(ExprEnum::Variable(Variable { name: b_token })),
                 })),
             })),
             op: star_token,
-            right: Box::new(ExprEnum::Variable(Variable {
-                name: c_token,
-            })),
+            right: Box::new(ExprEnum::Variable(Variable { name: c_token })),
         });
 
         let ast_printer = AstPrinter {};
         let result = expr.accept(&ast_printer);
-        
+
         // Should print: (* (group (+ a b)) c)
         assert_eq!(result, "(* (group (+ a b)) c)");
     }
@@ -397,23 +389,14 @@ mod tests {
     // -------------------------------------------------------------------------
     #[test]
     fn test_variable_different_names() {
-        let test_cases = vec![
-            "x",
-            "variable",
-            "myVar",
-            "userName",
-            "count123",
-            "_private",
-        ];
+        let test_cases = vec!["x", "variable", "myVar", "userName", "count123", "_private"];
 
         let ast_printer = AstPrinter {};
 
         for name in test_cases {
             let token = Token::new(TokenType::Identifier, name.to_string(), None, 1);
-            let expr = ExprEnum::Variable(Variable {
-                name: token,
-            });
-            
+            let expr = ExprEnum::Variable(Variable { name: token });
+
             let result = expr.accept(&ast_printer);
             assert_eq!(result, name);
         }
@@ -426,7 +409,7 @@ mod tests {
     fn test_ast_printer_assignment() {
         // Expression: a = 1
         let a_token = Token::new(TokenType::Identifier, "a".to_string(), None, 1);
-        
+
         let expr = ExprEnum::Assign(Assign {
             name: a_token,
             value: Box::new(ExprEnum::Literal(Literal {
@@ -436,7 +419,7 @@ mod tests {
 
         let ast_printer = AstPrinter {};
         let result = expr.accept(&ast_printer);
-        
+
         // Should print: (= a 1)
         assert_eq!(result, "(= a 1)");
     }
