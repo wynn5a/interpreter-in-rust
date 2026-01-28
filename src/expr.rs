@@ -10,8 +10,15 @@
 // - Visitor: Trait for traversing the expression tree.
 // - Specific structs (Binary, Unary, Literal, etc.): Data holders for each node.
 
-use std::any::Any;
 use crate::token::Token;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum LiteralValue {
+    Number(f64),
+    String(String),
+    Boolean(bool),
+    Nil,
+}
 
 // Define the enum with variants for each type
 #[allow(dead_code)]
@@ -54,7 +61,7 @@ pub(crate) struct Assign {
 }
 
 pub(crate) struct Literal {
-    pub(crate) value: Box<dyn Any>,
+    pub(crate) value: LiteralValue,
 }
 
 #[allow(dead_code)]
@@ -102,22 +109,11 @@ impl Visitor<String> for AstPrinter {
     }
 
     fn visit_literal(&self, expr: &Literal) -> String {
-        if let Some(v) = expr.value.downcast_ref::<&str>() {
-            v.to_string()
-        } else if let Some(v) = expr.value.downcast_ref::<String>() {
-            v.clone()
-        } else if let Some(v) = expr.value.downcast_ref::<bool>() {
-            v.to_string()
-        } else if let Some(v) = expr.value.downcast_ref::<i32>() {
-            v.to_string()
-        } else if let Some(v) = expr.value.downcast_ref::<i64>() {
-            v.to_string()
-        } else if let Some(v) = expr.value.downcast_ref::<f64>() {
-            v.to_string()
-        } else if let Some(_) = expr.value.downcast_ref::<()>() {
-            "nil".to_string()
-        } else {
-            panic!("Unsupported type")
+        match &expr.value {
+            LiteralValue::Number(n) => n.to_string(),
+            LiteralValue::String(s) => s.clone(),
+            LiteralValue::Boolean(b) => b.to_string(),
+            LiteralValue::Nil => "nil".to_string(),
         }
     }
 
@@ -148,11 +144,11 @@ mod tests {
     fn test_ast_printer() {
         let expr = ExprEnum::Binary(Binary {
             left: Box::new(ExprEnum::Literal(Literal {
-                value: Box::new(1),
+                value: LiteralValue::Number(1.0),
             })),
             op: Token::new(TokenType::Plus, "+".to_string(), None, 1),
             right: Box::new(ExprEnum::Literal(Literal {
-                value: Box::new(2),
+                value: LiteralValue::Number(2.0),
             })),
         });
 
@@ -166,11 +162,11 @@ mod tests {
         let expr = ExprEnum::Grouping(Grouping {
             expression: Box::new(ExprEnum::Binary(Binary {
                 left: Box::new(ExprEnum::Literal(Literal {
-                    value: Box::new(1),
+                    value: LiteralValue::Number(1.0),
                 })),
                 op: Token::new(TokenType::Plus, "+".to_string(), None, 1),
                 right: Box::new(ExprEnum::Literal(Literal {
-                    value: Box::new(2),
+                    value: LiteralValue::Number(2.0),
                 })),
             })),
         });
@@ -185,7 +181,7 @@ mod tests {
         let expr = ExprEnum::Unary(Unary {
             op: Token::new(TokenType::Minus, "-".to_string(), None, 1),
             right: Box::new(ExprEnum::Literal(Literal {
-                value: Box::new(1),
+                value: LiteralValue::Number(1.0),
             })),
         });
 
@@ -199,7 +195,7 @@ mod tests {
         let expr = ExprEnum::Unary(Unary {
             op: Token::new(TokenType::Minus, "-".to_string(), None, 1),
             right: Box::new(ExprEnum::Literal(Literal {
-                value: Box::new(44),
+                value: LiteralValue::Number(44.0),
             })),
         });
 
@@ -211,12 +207,12 @@ mod tests {
     #[test]
     fn test_literal() {
         let expr = ExprEnum::Literal(Literal {
-            value: Box::new("44.0"),
+            value: LiteralValue::Number(44.0),
         });
 
         let ast_printer = AstPrinter {};
         let result = expr.accept(&ast_printer);
-        assert_eq!(result, "44.0");
+        assert_eq!(result, "44");
     }
 
     // =========================================================================
@@ -277,7 +273,7 @@ mod tests {
             })),
             op: plus_token,
             right: Box::new(ExprEnum::Literal(Literal {
-                value: Box::new(1),
+                value: LiteralValue::Number(1.0),
             })),
         });
 
@@ -434,7 +430,7 @@ mod tests {
         let expr = ExprEnum::Assign(Assign {
             name: a_token,
             value: Box::new(ExprEnum::Literal(Literal {
-                value: Box::new(1),
+                value: LiteralValue::Number(1.0),
             })),
         });
 

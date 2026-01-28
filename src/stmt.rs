@@ -84,7 +84,7 @@ pub trait Visitor<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expr::{ExprEnum, Literal};
+    use crate::expr::{ExprEnum, Literal, LiteralValue};
     use crate::token::Token;
     use crate::token_types::TokenType;
 
@@ -122,7 +122,7 @@ mod tests {
     #[test]
     fn test_expression_stmt_creation() {
         let expr = Box::new(ExprEnum::Literal(Literal {
-            value: Box::new(42.0),
+            value: LiteralValue::Number(42.0),
         }));
         
         let stmt = StmtEnum::Expression(ExpressionStmt {
@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn test_print_stmt_creation() {
         let expr = Box::new(ExprEnum::Literal(Literal {
-            value: Box::new("hello".to_string()),
+            value: LiteralValue::String("hello".to_string()),
         }));
         
         let stmt = StmtEnum::Print(PrintStmt {
@@ -154,10 +154,10 @@ mod tests {
         use crate::expr::Binary;
         
         let left = Box::new(ExprEnum::Literal(Literal {
-            value: Box::new(1.0),
+            value: LiteralValue::Number(1.0),
         }));
         let right = Box::new(ExprEnum::Literal(Literal {
-            value: Box::new(2.0),
+            value: LiteralValue::Number(2.0),
         }));
         let op = Token::new(TokenType::Plus, "+".to_string(), None, 1);
         
@@ -187,7 +187,7 @@ mod tests {
     fn test_var_stmt_with_initializer_creation() {
         let name_token = Token::new(TokenType::Identifier, "x".to_string(), None, 1);
         let initializer = Box::new(ExprEnum::Literal(Literal {
-            value: Box::new(42.0),
+            value: LiteralValue::Number(42.0),
         }));
 
         let stmt = StmtEnum::Var(VarStmt {
@@ -234,7 +234,7 @@ mod tests {
     fn test_var_stmt_number_initializer() {
         let name_token = Token::new(TokenType::Identifier, "age".to_string(), None, 1);
         let initializer = Box::new(ExprEnum::Literal(Literal {
-            value: Box::new(25.0),
+            value: LiteralValue::Number(25.0),
         }));
 
         let stmt = StmtEnum::Var(VarStmt {
@@ -254,7 +254,7 @@ mod tests {
     fn test_var_stmt_string_initializer() {
         let name_token = Token::new(TokenType::Identifier, "name".to_string(), None, 1);
         let initializer = Box::new(ExprEnum::Literal(Literal {
-            value: Box::new("Alice".to_string()),
+            value: LiteralValue::String("Alice".to_string()),
         }));
 
         let stmt = StmtEnum::Var(VarStmt {
@@ -274,7 +274,7 @@ mod tests {
     fn test_var_stmt_boolean_initializer() {
         let name_token = Token::new(TokenType::Identifier, "flag".to_string(), None, 1);
         let initializer = Box::new(ExprEnum::Literal(Literal {
-            value: Box::new(true),
+            value: LiteralValue::Boolean(true),
         }));
 
         let stmt = StmtEnum::Var(VarStmt {
@@ -297,10 +297,10 @@ mod tests {
         let name_token = Token::new(TokenType::Identifier, "sum".to_string(), None, 1);
         
         let left = Box::new(ExprEnum::Literal(Literal {
-            value: Box::new(10.0),
+            value: LiteralValue::Number(10.0),
         }));
         let right = Box::new(ExprEnum::Literal(Literal {
-            value: Box::new(20.0),
+            value: LiteralValue::Number(20.0),
         }));
         let op = Token::new(TokenType::Plus, "+".to_string(), None, 1);
         
@@ -371,7 +371,7 @@ mod tests {
         for name in var_names {
             let name_token = Token::new(TokenType::Identifier, name.to_string(), None, 1);
             let initializer = Box::new(ExprEnum::Literal(Literal {
-                value: Box::new(0.0),
+                value: LiteralValue::Number(0.0),
             }));
 
             let stmt = StmtEnum::Var(VarStmt {
@@ -399,10 +399,10 @@ mod tests {
         
         // Expression: (1 + 2) * 3
         let inner_left = Box::new(ExprEnum::Literal(Literal {
-            value: Box::new(1.0),
+            value: LiteralValue::Number(1.0),
         }));
         let inner_right = Box::new(ExprEnum::Literal(Literal {
-            value: Box::new(2.0),
+            value: LiteralValue::Number(2.0),
         }));
         let plus_op = Token::new(TokenType::Plus, "+".to_string(), None, 1);
         
@@ -417,7 +417,7 @@ mod tests {
         }));
 
         let three = Box::new(ExprEnum::Literal(Literal {
-            value: Box::new(3.0),
+            value: LiteralValue::Number(3.0),
         }));
         let star_op = Token::new(TokenType::Star, "*".to_string(), None, 1);
 

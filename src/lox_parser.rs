@@ -27,7 +27,7 @@
 // primary        → NUMBER | STRING | "true" | "false" | "nil"
 //                | "(" expression ")" | IDENTIFIER ;
 
-use crate::expr::{Assign, Binary, ExprEnum, Grouping, Literal, Unary, Variable};
+use crate::expr::{Assign, Binary, ExprEnum, Grouping, Literal, LiteralValue, Unary, Variable};
 use crate::stmt::{BlockStmt, ExpressionStmt, PrintStmt, StmtEnum, VarStmt};
 use crate::token::Token;
 use crate::token_types::TokenType::{self, *};
@@ -286,29 +286,29 @@ impl LoxParser {
     fn primary(&mut self) -> Box<ExprEnum> {
         if self.match_tokens(&[False]) {
             return Box::new(ExprEnum::Literal(Literal {
-                value: Box::from(false),
+                value: LiteralValue::Boolean(false),
             }));
         }
         if self.match_tokens(&[True]) {
             return Box::new(ExprEnum::Literal(Literal {
-                value: Box::from(true),
+                value: LiteralValue::Boolean(true),
             }));
         }
         if self.match_tokens(&[Nil]) {
             return Box::new(ExprEnum::Literal(Literal {
-                value: Box::new(()),
+                value: LiteralValue::Nil,
             }));
         }
         if self.match_tokens(&[Number]) {
             let literal_str = self.previous().literal.unwrap();
             let num = literal_str.parse::<f64>().expect("Failed to parse number");
             return Box::new(ExprEnum::Literal(Literal {
-                value: Box::new(num),
+                value: LiteralValue::Number(num),
             }));
         }
         if self.match_tokens(&[String]) {
             return Box::new(ExprEnum::Literal(Literal {
-                value: Box::new(self.previous().literal.unwrap()),
+                value: LiteralValue::String(self.previous().literal.unwrap()),
             }));
         }
         if self.match_tokens(&[Identifier]) {

@@ -32,7 +32,7 @@ Lox interpreter implementation in Rust (CodeCrafters challenge, following "Craft
 | Task | Location | Notes |
 |------|----------|-------|
 | Add new token types | src/token_types.rs | Add to enum + Display impl |
-| Modify lexer behavior | src/lox_tokenizer.rs | Main tokenize() function (line 24+ has O(n²) anti-pattern) |
+| Modify lexer behavior | src/lox_tokenizer.rs | Main tokenize() function |
 | Extend grammar | src/lox_parser.rs | Add parsing method following BNF pattern (lines 13-30) |
 | Add expression AST node | src/expr.rs | Add struct + Visitor::visit_* method in AstPrinter |
 | Add statement AST node | src/stmt.rs | Add struct + Visitor::visit_* method in StmtPrinter |
@@ -74,7 +74,7 @@ Lox interpreter implementation in Rust (CodeCrafters challenge, following "Craft
 - **Build target**: Custom `/tmp/codecrafters-interpreter-target` (not `./target/`)
 - **CLI parsing**: Manual argument handling, not `clap` (main.rs:17-118)
 - **Error handling**: Uses `unwrap()` instead of Result propagation (227 unwrap() calls)
-- **Literal types**: Uses `Box<dyn Any>` + downcasting in AST (non-idiomatic, should be enum)
+- Literal types: Uses `LiteralValue` enum (type-safe)
 - **Module structure**: No `lib.rs`, binary-only crate
 - **Cargo.toml**: LOCKED - DO NOT EDIT (managed by CodeCrafters)
 
@@ -100,18 +100,15 @@ Lox interpreter implementation in Rust (CodeCrafters challenge, following "Craft
 - Change build target directory structure
 - Replace visitor pattern with direct AST iteration
 - Use `.chars().nth(current)` in loops (O(n²) performance anti-pattern)
-- Replace `Box<dyn Any>` with different type (breaks existing code)
 - Remove `pub(crate)` visibility on internal APIs
 - Change error reporting to `panic!` instead of flag setting
 
 **Known issues:**
-- Line 24 in lox_tokenizer.rs: `input.chars().nth(current).unwrap()` is O(n²) performance anti-pattern
-- expr.rs:83-111: Downcasting in `visit_literal()` is fragile (panics on unsupported types)
-- Unicode handling mismatch: Tokenizer uses `graphemes(true).count()` for length but `chars()` for iteration
+- Unicode handling: Tokenizer uses `chars()` which iterates over Unicode Scalar Values, not Grapheme Clusters. This means complex emojis or combined characters might be split.
 
 ## UNIQUE STYLES
 
-**Unicode handling:** Uses `unicode_segmentation` crate for grapheme counting, but char iteration is O(n²) due to `.chars().nth()` calls.
+**Unicode handling:** Uses `chars()` for iteration.
 
 **Grammar comments:** Embedded BNF in lox_parser.rs (lines 13-30) serves as documentation of parser rules. Includes statement grammar.
 
@@ -121,7 +118,7 @@ Lox interpreter implementation in Rust (CodeCrafters challenge, following "Craft
 
 **Variable scoping:** Implements Environment chain for nested scopes (environment.rs). Variables declared with `var` keyword support shadowing.
 
-**Runtime values:** LoxValue enum replaces Box<dyn Any> for idiomatic type representation (lines 268-296).
+**Runtime values:** LoxValue enum replaces `Box<dyn Any>` for idiomatic type representation (lines 268-296).
 
 ## COMMANDS
 ```bash
@@ -141,7 +138,7 @@ cargo run --release -- run <file>
 
 ## NOTES
 
-**Performance issue:** Tokenizer uses `.chars().nth(current)` which is O(n) per call, resulting in O(n²) total complexity. Consider using `chars().enumerate()` or pre-converting to `Vec<char>`.
+**Performance:** Tokenizer uses `Vec<char>` for O(1) character access, ensuring O(n) total complexity.
 
 **Feature complete:** The interpreter now supports:
 - Expression evaluation with all operators

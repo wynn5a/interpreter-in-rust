@@ -185,31 +185,12 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
     }
 
     fn visit_literal(&self, expr: &crate::expr::Literal) -> Result<LoxValue, RuntimeError> {
-        let value = &expr.value;
-        
-        if let Some(&num) = value.downcast_ref::<f64>() {
-            return Ok(LoxValue::Number(num));
+        match &expr.value {
+            crate::expr::LiteralValue::Number(n) => Ok(LoxValue::Number(*n)),
+            crate::expr::LiteralValue::String(s) => Ok(LoxValue::String(s.clone())),
+            crate::expr::LiteralValue::Boolean(b) => Ok(LoxValue::Boolean(*b)),
+            crate::expr::LiteralValue::Nil => Ok(LoxValue::Nil),
         }
-        if let Some(&num) = value.downcast_ref::<i32>() {
-            return Ok(LoxValue::Number(num as f64));
-        }
-        if let Some(&num) = value.downcast_ref::<i64>() {
-            return Ok(LoxValue::Number(num as f64));
-        }
-        if let Some(s) = value.downcast_ref::<String>() {
-            return Ok(LoxValue::String(s.clone()));
-        }
-        if let Some(&s) = value.downcast_ref::<&str>() {
-            return Ok(LoxValue::String(s.to_string()));
-        }
-        if let Some(&b) = value.downcast_ref::<bool>() {
-            return Ok(LoxValue::Boolean(b));
-        }
-        if value.downcast_ref::<()>().is_some() {
-            return Ok(LoxValue::Nil);
-        }
-        
-        Err(RuntimeError::new("Unsupported literal type".to_string(), 0))
     }
 
     fn visit_grouping(&self, expr: &crate::expr::Grouping) -> Result<LoxValue, RuntimeError> {
@@ -413,9 +394,9 @@ mod tests {
         // Test that we can create an Interpreter instance
         let interpreter = Interpreter::new();
         // Verify interpreter exists and can evaluate a simple expression
-        use crate::expr::{ExprEnum, Literal};
+        use crate::expr::{ExprEnum, Literal, LiteralValue};
         let expr = ExprEnum::Literal(Literal {
-            value: Box::new(42.0_f64),
+            value: LiteralValue::Number(42.0),
         });
         // Just verify we can call evaluate - result check is in other tests
         let _ = interpreter.evaluate(&expr);
@@ -428,9 +409,9 @@ mod tests {
         let interpreter = Interpreter::new();
         
         // Create a simple literal expression for testing
-        use crate::expr::{ExprEnum, Literal};
+        use crate::expr::{ExprEnum, Literal, LiteralValue};
         let expr = ExprEnum::Literal(Literal {
-            value: Box::new(42.0_f64),
+            value: LiteralValue::Number(42.0),
         });
         
         // evaluate() should return Result<LoxValue, RuntimeError>
@@ -471,12 +452,58 @@ mod tests {
     //
     // -------------------------------------------------------------------------
 
+    trait IntoLiteralValue {
+        fn into_literal_value(self) -> crate::expr::LiteralValue;
+    }
+
+    impl IntoLiteralValue for f64 {
+        fn into_literal_value(self) -> crate::expr::LiteralValue {
+            crate::expr::LiteralValue::Number(self)
+        }
+    }
+
+    impl IntoLiteralValue for i32 {
+        fn into_literal_value(self) -> crate::expr::LiteralValue {
+            crate::expr::LiteralValue::Number(self as f64)
+        }
+    }
+
+    impl IntoLiteralValue for i64 {
+        fn into_literal_value(self) -> crate::expr::LiteralValue {
+            crate::expr::LiteralValue::Number(self as f64)
+        }
+    }
+
+    impl IntoLiteralValue for String {
+        fn into_literal_value(self) -> crate::expr::LiteralValue {
+            crate::expr::LiteralValue::String(self)
+        }
+    }
+
+    impl IntoLiteralValue for &str {
+        fn into_literal_value(self) -> crate::expr::LiteralValue {
+            crate::expr::LiteralValue::String(self.to_string())
+        }
+    }
+
+    impl IntoLiteralValue for bool {
+        fn into_literal_value(self) -> crate::expr::LiteralValue {
+            crate::expr::LiteralValue::Boolean(self)
+        }
+    }
+
+    impl IntoLiteralValue for () {
+        fn into_literal_value(self) -> crate::expr::LiteralValue {
+            crate::expr::LiteralValue::Nil
+        }
+    }
+
     // Helper function to create and evaluate a literal expression
-    fn eval_literal<T: 'static>(value: T) -> Result<LoxValue, RuntimeError> {
+    fn eval_literal<T: IntoLiteralValue>(value: T) -> Result<LoxValue, RuntimeError> {
         use crate::expr::{ExprEnum, Literal};
         let interpreter = Interpreter::new();
         let expr = ExprEnum::Literal(Literal {
-            value: Box::new(value),
+            value: value.into_literal_value(),
         });
         interpreter.evaluate(&expr)
     }
@@ -659,10 +686,10 @@ mod tests {
     }
 
     // Helper function to create a literal expression
-    fn make_literal<T: 'static>(value: T) -> crate::expr::ExprEnum {
+    fn make_literal<T: IntoLiteralValue>(value: T) -> crate::expr::ExprEnum {
         use crate::expr::{ExprEnum, Literal};
         ExprEnum::Literal(Literal {
-            value: Box::new(value),
+            value: value.into_literal_value(),
         })
     }
 
