@@ -1,9 +1,10 @@
+use clap::{Parser, Subcommand};
 use crate::expr::AstPrinter;
 use crate::lox_interpreter::Interpreter;
 use crate::lox_tokenizer::LoxTokenizer;
 use std::fs;
 use std::io::{self, Write};
-use std::{env, process};
+use std::process;
 
 mod environment;
 mod expr;
@@ -14,15 +15,30 @@ mod stmt;
 mod token;
 mod token_types;
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 3 {
-        writeln!(io::stderr(), "Usage: {} tokenize <filename>", args[0]).unwrap();
-        return;
-    }
+#[derive(Parser)]
+#[command(name = "lox")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
 
-    let command = &args[1];
-    let filename = &args[2];
+#[derive(Subcommand)]
+enum Commands {
+    Tokenize { filename: String },
+    Parse { filename: String },
+    Evaluate { filename: String },
+    Run { filename: String },
+}
+
+fn main() {
+    let cli = Cli::parse();
+
+    let filename = match &cli.command {
+        Commands::Tokenize { filename } => filename,
+        Commands::Parse { filename } => filename,
+        Commands::Evaluate { filename } => filename,
+        Commands::Run { filename } => filename,
+    };
 
     let file_contents = read_file(filename);
     if file_contents.is_empty() {
@@ -32,8 +48,8 @@ fn main() {
 
     writeln!(io::stderr(), "Read file with content: {} \n\n", file_contents).unwrap();
 
-    match command.as_str() {
-        "tokenize" => {
+    match cli.command {
+        Commands::Tokenize { .. } => {
             let mut tokenizer = LoxTokenizer::default();
             let result = tokenizer.tokenize(&file_contents);
             for token in result {
@@ -43,7 +59,7 @@ fn main() {
                 process::exit(65)
             };
         }
-        "parse" => {
+        Commands::Parse { .. } => {
             let mut lox_tokenizer = LoxTokenizer::default();
             let tokens = lox_tokenizer.tokenize(&file_contents);
             if lox_tokenizer.had_error {
@@ -59,7 +75,7 @@ fn main() {
             }
             println!("{}", expr.accept(&AstPrinter {}));
         }
-        "evaluate" => {
+        Commands::Evaluate { .. } => {
             let mut lox_tokenizer = LoxTokenizer::default();
             let tokens = lox_tokenizer.tokenize(&file_contents);
             if lox_tokenizer.had_error {
@@ -86,7 +102,7 @@ fn main() {
                 }
             }
         }
-        "run" => {
+        Commands::Run { .. } => {
             let mut lox_tokenizer = LoxTokenizer::default();
             let tokens = lox_tokenizer.tokenize(&file_contents);
             if lox_tokenizer.had_error {
@@ -109,10 +125,6 @@ fn main() {
                     process::exit(70);
                 }
             }
-        }
-        _ => {
-            writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
-            return;
         }
     }
 }
