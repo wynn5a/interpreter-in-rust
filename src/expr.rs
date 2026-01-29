@@ -22,6 +22,7 @@ pub enum LiteralValue {
 
 // Define the enum with variants for each type
 #[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ExprEnum {
     Assign(Assign),
     Binary(Binary),
@@ -30,6 +31,7 @@ pub enum ExprEnum {
     Logical(Logical),
     Unary(Unary),
     Variable(Variable),
+    Call(Call),
     None,
 }
 
@@ -44,44 +46,59 @@ impl ExprEnum {
             ExprEnum::Logical(expr) => visitor.visit_logical(expr),
             ExprEnum::Unary(expr) => visitor.visit_unary(expr),
             ExprEnum::Variable(expr) => visitor.visit_variable(expr),
+            ExprEnum::Call(expr) => visitor.visit_call(expr),
             ExprEnum::None => panic!("Invalid expression type"),
         }
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Call {
+    pub(crate) callee: Box<ExprEnum>,
+    pub(crate) paren: Token,
+    pub(crate) arguments: Vec<ExprEnum>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Binary {
     pub(crate) left: Box<ExprEnum>,
     pub(crate) op: Token,
     pub(crate) right: Box<ExprEnum>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Assign {
     pub(crate) name: Token,
     pub(crate) value: Box<ExprEnum>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Literal {
     pub(crate) value: LiteralValue,
 }
 
 #[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Logical {
     pub(crate) left: Box<ExprEnum>,
     pub(crate) op: Token,
     pub(crate) right: Box<ExprEnum>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Unary {
     pub(crate) op: Token,
     pub(crate) right: Box<ExprEnum>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Grouping {
     pub(crate) expression: Box<ExprEnum>,
 }
 
 // Variable expression: represents a variable reference (e.g., "x" in "print x;")
 #[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Variable {
     pub(crate) name: Token,
 }
@@ -95,6 +112,7 @@ pub trait Visitor<T> {
     fn visit_logical(&self, expr: &Logical) -> T;
     fn visit_unary(&self, expr: &Unary) -> T;
     fn visit_variable(&self, expr: &Variable) -> T;
+    fn visit_call(&self, expr: &Call) -> T;
 }
 
 pub struct AstPrinter;
@@ -102,6 +120,17 @@ pub struct AstPrinter;
 impl Visitor<String> for AstPrinter {
     fn visit_assign(&self, expr: &Assign) -> String {
         format!("(= {} {})", expr.name.lexeme, expr.value.accept(self))
+    }
+
+    fn visit_call(&self, expr: &Call) -> String {
+        // (call callee arg1 arg2 ...)
+        // This is not standard Lox AST printer output but good for debugging
+        let mut args = String::new();
+        for arg in &expr.arguments {
+            args.push(' ');
+            args.push_str(&arg.accept(self));
+        }
+        format!("(call {}{})", expr.callee.accept(self), args)
     }
 
     fn visit_binary(&self, expr: &Binary) -> String {

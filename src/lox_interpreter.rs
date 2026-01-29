@@ -19,14 +19,40 @@ use crate::environment::Environment;
 use crate::stmt;
 use crate::token_types::TokenType;
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// LoxCallable trait for functions (native and user-defined)
+pub trait LoxCallable: fmt::Debug + fmt::Display {
+    fn arity(&self) -> usize;
+    fn call(
+        &self,
+        interpreter: &Interpreter,
+        arguments: Vec<LoxValue>,
+    ) -> Result<LoxValue, RuntimeError>;
+}
+
 /// LoxValue represents runtime values in the Lox interpreter.
 /// This enum captures all possible value types that can exist during execution.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum LoxValue {
     Number(f64),
     String(String),
     Boolean(bool),
     Nil,
+    Callable(Rc<dyn LoxCallable>),
+}
+
+impl PartialEq for LoxValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (LoxValue::Number(a), LoxValue::Number(b)) => a == b,
+            (LoxValue::String(a), LoxValue::String(b)) => a == b,
+            (LoxValue::Boolean(a), LoxValue::Boolean(b)) => a == b,
+            (LoxValue::Nil, LoxValue::Nil) => true,
+            (LoxValue::Callable(_), LoxValue::Callable(_)) => false, // Functions are not comparable for equality
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for LoxValue {
@@ -45,6 +71,7 @@ impl fmt::Display for LoxValue {
             LoxValue::String(s) => write!(f, "{}", s),
             LoxValue::Boolean(b) => write!(f, "{}", b),
             LoxValue::Nil => write!(f, "nil"),
+            LoxValue::Callable(c) => write!(f, "{}", c),
         }
     }
 }
@@ -72,6 +99,37 @@ impl fmt::Display for RuntimeError {
     }
 }
 
+struct NativeFunction {
+    arity: usize,
+    fun: Rc<dyn Fn(&Interpreter, Vec<LoxValue>) -> Result<LoxValue, RuntimeError>>,
+    name: String,
+}
+
+impl fmt::Debug for NativeFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<native fn {}>", self.name)
+    }
+}
+
+impl fmt::Display for NativeFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<native fn {}>", self.name)
+    }
+}
+
+impl LoxCallable for NativeFunction {
+    fn arity(&self) -> usize {
+        self.arity
+    }
+    fn call(
+        &self,
+        interpreter: &Interpreter,
+        arguments: Vec<LoxValue>,
+    ) -> Result<LoxValue, RuntimeError> {
+        (self.fun)(interpreter, arguments)
+    }
+}
+
 /// Interpreter evaluates Lox expressions and executes statements.
 pub struct Interpreter {
     pub(crate) environment: RefCell<Rc<RefCell<Environment>>>,
@@ -80,8 +138,28 @@ pub struct Interpreter {
 impl Interpreter {
     /// Creates a new interpreter with an empty environment.
     pub fn new() -> Self {
+        let env = Rc::new(RefCell::new(Environment::new()));
+
+        // Define clock()
+        let clock_fun = NativeFunction {
+            arity: 0,
+            name: "clock".to_string(),
+            fun: Rc::new(|_, _| {
+                let start = SystemTime::now();
+                let since_the_epoch = start
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Time went backwards");
+                Ok(LoxValue::Number(since_the_epoch.as_secs_f64()))
+            }),
+        };
+
+        env.borrow_mut().define(
+            "clock".to_string(),
+            LoxValue::Callable(Rc::new(clock_fun)),
+        );
+
         Interpreter {
-            environment: RefCell::new(Rc::new(RefCell::new(Environment::new()))),
+            environment: RefCell::new(env),
         }
     }
 
@@ -243,6 +321,35 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
             .borrow()
             .get(&expr.name.lexeme)
             .map_err(|msg| RuntimeError::new(msg, expr.name.line))
+    }
+
+    fn visit_call(&self, expr: &crate::expr::Call) -> Result<LoxValue, RuntimeError> {
+        let callee = self.evaluate(&expr.callee)?;
+
+        let mut arguments = Vec::new();
+        for arg in &expr.arguments {
+            arguments.push(self.evaluate(arg)?);
+        }
+
+        match callee {
+            LoxValue::Callable(function) => {
+                if arguments.len() != function.arity() {
+                    return Err(RuntimeError::new(
+                        format!(
+                            "Expected {} arguments but got {}.",
+                            function.arity(),
+                            arguments.len()
+                        ),
+                        expr.paren.line,
+                    ));
+                }
+                function.call(self, arguments)
+            }
+            _ => Err(RuntimeError::new(
+                "Can only call functions and classes.".to_string(),
+                expr.paren.line,
+            )),
+        }
     }
 
     fn visit_logical(&self, expr: &crate::expr::Logical) -> Result<LoxValue, RuntimeError> {
@@ -3390,6 +3497,33 @@ var netIncome = salary * (1 - taxRate);
 
         let i = interpreter.environment.borrow().borrow().get("i");
         assert_eq!(i.unwrap(), LoxValue::Number(3.0));
+    }
+
+    #[test]
+    fn test_integration_native_function_clock() {
+        use crate::lox_parser::LoxParser;
+        use crate::lox_tokenizer::LoxTokenizer;
+
+        // print clock();
+        let source = "var t = clock();";
+
+        let mut tokenizer = LoxTokenizer::default();
+        let tokens = tokenizer.tokenize(source);
+        assert!(!tokenizer.had_error);
+
+        let mut parser = LoxParser::new(tokens);
+        let statements = parser.parse();
+        assert!(!parser.has_error);
+
+        let interpreter = Interpreter::new();
+        let result = interpreter.interpret(&statements);
+        assert!(result.is_ok());
+
+        let t = interpreter.environment.borrow().borrow().get("t").unwrap();
+        match t {
+            LoxValue::Number(n) => assert!(n > 0.0),
+            _ => panic!("Expected number from clock()"),
+        }
     }
 }
 

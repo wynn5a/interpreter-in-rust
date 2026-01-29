@@ -14,6 +14,7 @@
 // block          → "{" declaration* "}" ;
 // exprStmt       → expression ";" ;
 // printStmt      → "print" expression ";" ;
+
 //
 // expression     → assignment ;
 // assignment     → IDENTIFIER "=" assignment | logic_or ;
@@ -335,7 +336,7 @@ impl LoxParser {
 
     fn unary(&mut self) -> Box<ExprEnum> {
         if !self.match_tokens(&[Bang, Minus]) {
-            return self.primary();
+            return self.call();
         }
 
         let operator = self.previous();
@@ -343,6 +344,44 @@ impl LoxParser {
         Box::new(ExprEnum::Unary(Unary {
             op: operator,
             right,
+        }))
+    }
+
+    fn call(&mut self) -> Box<ExprEnum> {
+        let mut expr = self.primary();
+
+        loop {
+            if self.match_tokens(&[LeftParen]) {
+                expr = self.finish_call(expr);
+            } else {
+                break;
+            }
+        }
+
+        expr
+    }
+
+    fn finish_call(&mut self, callee: Box<ExprEnum>) -> Box<ExprEnum> {
+        let mut arguments = Vec::new();
+        if !self.check(RightParen) {
+            loop {
+                if arguments.len() >= 255 {
+                    self.error(self.peek(), "Can't have more than 255 arguments.");
+                }
+                arguments.push(*self.expression());
+                if !self.match_tokens(&[Comma]) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(RightParen, "Expect ')' after arguments.");
+        let paren = self.previous();
+
+        Box::new(ExprEnum::Call(crate::expr::Call {
+            callee,
+            paren,
+            arguments,
         }))
     }
 
@@ -1545,6 +1584,59 @@ mod tests {
                 }
             }
             _ => panic!("Expected Block statement (outer scope for 'for' loop)"),
+        }
+    }
+
+    #[test]
+    fn test_parse_call_no_args() {
+        // clock()
+        let tokens = vec![
+            Token::new(TokenType::Identifier, "clock".to_string(), None, 1),
+            Token::new(TokenType::LeftParen, "(".to_string(), None, 1),
+            Token::new(TokenType::RightParen, ")".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let mut parser = LoxParser::new(tokens);
+        let expr = parser.parse_expression();
+
+        match expr.as_ref() {
+            ExprEnum::Call(call) => {
+                match call.callee.as_ref() {
+                    ExprEnum::Variable(v) => assert_eq!(v.name.lexeme, "clock"),
+                    _ => panic!("Expected variable callee"),
+                }
+                assert_eq!(call.arguments.len(), 0);
+            }
+            _ => panic!("Expected Call expression, got {:?}", expr),
+        }
+    }
+
+    #[test]
+    fn test_parse_call_with_args() {
+        // add(1, 2)
+        let tokens = vec![
+            Token::new(TokenType::Identifier, "add".to_string(), None, 1),
+            Token::new(TokenType::LeftParen, "(".to_string(), None, 1),
+            Token::new(TokenType::Number, "1".to_string(), Some("1".to_string()), 1),
+            Token::new(TokenType::Comma, ",".to_string(), None, 1),
+            Token::new(TokenType::Number, "2".to_string(), Some("2".to_string()), 1),
+            Token::new(TokenType::RightParen, ")".to_string(), None, 1),
+            Token::new(TokenType::Eof, "".to_string(), None, 1),
+        ];
+
+        let mut parser = LoxParser::new(tokens);
+        let expr = parser.parse_expression();
+
+        match expr.as_ref() {
+            ExprEnum::Call(call) => {
+                match call.callee.as_ref() {
+                    ExprEnum::Variable(v) => assert_eq!(v.name.lexeme, "add"),
+                    _ => panic!("Expected variable callee"),
+                }
+                assert_eq!(call.arguments.len(), 2);
+            }
+            _ => panic!("Expected Call expression, got {:?}", expr),
         }
     }
 }
