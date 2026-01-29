@@ -15,6 +15,7 @@ use crate::token::Token;
 
 // Define the statement enum with variants for each statement type
 #[allow(dead_code)]
+#[derive(Clone)]
 pub enum StmtEnum {
     Expression(ExpressionStmt),
     Print(PrintStmt),
@@ -22,6 +23,7 @@ pub enum StmtEnum {
     Block(BlockStmt),
     If(IfStmt),
     While(WhileStmt),
+    Function(FunctionStmt),
     None,
 }
 
@@ -35,17 +37,20 @@ impl StmtEnum {
             StmtEnum::Block(stmt) => visitor.visit_block_stmt(stmt),
             StmtEnum::If(stmt) => visitor.visit_if_stmt(stmt),
             StmtEnum::While(stmt) => visitor.visit_while_stmt(stmt),
+            StmtEnum::Function(stmt) => visitor.visit_function_stmt(stmt),
             StmtEnum::None => panic!("Invalid statement type"),
         }
     }
 }
 
 // Expression statement: wraps an expression to execute it for side effects
+#[derive(Clone)]
 pub(crate) struct ExpressionStmt {
     pub(crate) expression: Box<ExprEnum>,
 }
 
 // Print statement: evaluates an expression and prints the result
+#[derive(Clone)]
 pub(crate) struct PrintStmt {
     pub(crate) expression: Box<ExprEnum>,
 }
@@ -55,17 +60,20 @@ pub(crate) struct PrintStmt {
 //   var x = 10;      // with initializer
 //   var y;           // without initializer (defaults to nil)
 #[allow(dead_code)]
+#[derive(Clone)]
 pub(crate) struct VarStmt {
     pub(crate) name: Token,
     pub(crate) initializer: Option<Box<ExprEnum>>,
 }
 
 // Block statement: groups multiple statements into a block
+#[derive(Clone)]
 pub(crate) struct BlockStmt {
     pub(crate) statements: Vec<StmtEnum>,
 }
 
 // If statement: conditionally executes statements
+#[derive(Clone)]
 pub(crate) struct IfStmt {
     pub(crate) condition: Box<ExprEnum>,
     pub(crate) then_branch: Box<StmtEnum>,
@@ -73,9 +81,18 @@ pub(crate) struct IfStmt {
 }
 
 // While statement: repeatedly executes a body statement while a condition is true
+#[derive(Clone)]
 pub(crate) struct WhileStmt {
     pub(crate) condition: Box<ExprEnum>,
     pub(crate) body: Box<StmtEnum>,
+}
+
+// Function statement: declares a function
+#[derive(Clone)]
+pub(crate) struct FunctionStmt {
+    pub(crate) name: Token,
+    pub(crate) params: Vec<Token>,
+    pub(crate) body: Vec<StmtEnum>,
 }
 
 // Visitor trait for statements
@@ -88,6 +105,7 @@ pub trait Visitor<T> {
     fn visit_block_stmt(&self, stmt: &BlockStmt) -> T;
     fn visit_if_stmt(&self, stmt: &IfStmt) -> T;
     fn visit_while_stmt(&self, stmt: &WhileStmt) -> T;
+    fn visit_function_stmt(&self, stmt: &FunctionStmt) -> T;
 }
 
 #[cfg(test)]
@@ -129,6 +147,10 @@ mod tests {
 
         fn visit_while_stmt(&self, _stmt: &WhileStmt) -> String {
             "while-stmt".to_string()
+        }
+
+        fn visit_function_stmt(&self, _stmt: &FunctionStmt) -> String {
+            "function-stmt".to_string()
         }
     }
 
@@ -464,6 +486,45 @@ mod tests {
                 _ => panic!("Expected Literal expression"),
             },
             _ => panic!("Expected While statement"),
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 12: FunctionStmt creation
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_function_stmt_creation() {
+        let name_token = Token::new(TokenType::Identifier, "foo".to_string(), None, 1);
+        
+        // Params: a, b
+        let params = vec![
+            Token::new(TokenType::Identifier, "a".to_string(), None, 1),
+            Token::new(TokenType::Identifier, "b".to_string(), None, 1),
+        ];
+
+        // Body: { print "hello"; }
+        let body_stmt = StmtEnum::Print(PrintStmt {
+            expression: Box::new(ExprEnum::Literal(Literal {
+                value: LiteralValue::String("hello".to_string()),
+            })),
+        });
+        let body = vec![body_stmt];
+
+        let stmt = StmtEnum::Function(FunctionStmt {
+            name: name_token.clone(),
+            params: params.clone(),
+            body: body.clone(),
+        });
+
+        match stmt {
+            StmtEnum::Function(func_stmt) => {
+                assert_eq!(func_stmt.name.lexeme, "foo");
+                assert_eq!(func_stmt.params.len(), 2);
+                assert_eq!(func_stmt.params[0].lexeme, "a");
+                assert_eq!(func_stmt.params[1].lexeme, "b");
+                assert_eq!(func_stmt.body.len(), 1);
+            }
+            _ => panic!("Expected Function statement"),
         }
     }
 }
