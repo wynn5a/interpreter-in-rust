@@ -16,7 +16,7 @@ use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::environment::Environment;
-use crate::error::RuntimeError;
+use crate::error::{Return, RuntimeError};
 use crate::stmt;
 use crate::token_types::TokenType;
 use crate::value::{LoxFunction, LoxValue, NativeFunction};
@@ -44,10 +44,8 @@ impl Interpreter {
             }),
         };
 
-        env.borrow_mut().define(
-            "clock".to_string(),
-            LoxValue::Callable(Rc::new(clock_fun)),
-        );
+        env.borrow_mut()
+            .define("clock".to_string(), LoxValue::Callable(Rc::new(clock_fun)));
 
         Interpreter {
             environment: RefCell::new(env),
@@ -330,14 +328,21 @@ impl stmt::Visitor<Result<(), RuntimeError>> for Interpreter {
             closure: self.environment.borrow().clone(),
         };
 
-        self.environment
-            .borrow()
-            .borrow_mut()
-            .define(
-                stmt.name.lexeme.clone(),
-                LoxValue::Callable(Rc::new(function)),
-            );
+        self.environment.borrow().borrow_mut().define(
+            stmt.name.lexeme.clone(),
+            LoxValue::Callable(Rc::new(function)),
+        );
         Ok(())
+    }
+
+    fn visit_return_stmt(&self, stmt: &stmt::ReturnStmt) -> Result<(), RuntimeError> {
+        let value = if let Some(val_expr) = &stmt.value {
+            self.evaluate(val_expr)?
+        } else {
+            LoxValue::Nil
+        };
+
+        Err(RuntimeError::Return(Return { value }))
     }
 }
 

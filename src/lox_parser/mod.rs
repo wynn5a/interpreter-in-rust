@@ -29,7 +29,7 @@
 //                | "(" expression ")" | IDENTIFIER ;
 
 use crate::expr::{Assign, Binary, ExprEnum, Grouping, Literal, LiteralValue, Unary, Variable};
-use crate::stmt::{BlockStmt, ExpressionStmt, PrintStmt, StmtEnum, VarStmt};
+use crate::stmt::{BlockStmt, ExpressionStmt, PrintStmt, ReturnStmt, StmtEnum, VarStmt};
 use crate::token::Token;
 use crate::token_types::TokenType::{self, *};
 
@@ -122,7 +122,7 @@ impl LoxParser {
         }
         self.consume(RightParen, "Expect ')' after parameters.");
         self.consume(LeftBrace, &format!("Expect '{{' before {} body.", kind));
-        
+
         let body_stmt = self.block();
         let body = match body_stmt {
             StmtEnum::Block(b) => b.statements,
@@ -155,6 +155,9 @@ impl LoxParser {
         }
         if self.match_tokens(&[Print]) {
             return self.print_statement();
+        }
+        if self.match_tokens(&[Return]) {
+            return self.return_statement();
         }
         if self.match_tokens(&[While]) {
             return self.while_statement();
@@ -263,6 +266,17 @@ impl LoxParser {
         let value = self.expression();
         self.consume(Semicolon, "Expect ';' after value.");
         StmtEnum::Print(PrintStmt { expression: value })
+    }
+
+    fn return_statement(&mut self) -> StmtEnum {
+        let keyword = self.previous();
+        let value = if !self.check(Semicolon) {
+            Some(self.expression())
+        } else {
+            None
+        };
+        self.consume(Semicolon, "Expect ';' after return value.");
+        StmtEnum::Return(ReturnStmt { keyword, value })
     }
 
     fn expression_statement(&mut self) -> StmtEnum {
@@ -518,7 +532,6 @@ impl LoxParser {
 fn report(line: usize, location: &str, msg: &str) {
     eprintln!("[line {}] Error{}: {}", line, location, msg);
 }
-
 
 #[cfg(test)]
 mod tests;

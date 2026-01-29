@@ -24,6 +24,7 @@ pub enum StmtEnum {
     If(IfStmt),
     While(WhileStmt),
     Function(FunctionStmt),
+    Return(ReturnStmt),
     None,
 }
 
@@ -38,6 +39,7 @@ impl StmtEnum {
             StmtEnum::If(stmt) => visitor.visit_if_stmt(stmt),
             StmtEnum::While(stmt) => visitor.visit_while_stmt(stmt),
             StmtEnum::Function(stmt) => visitor.visit_function_stmt(stmt),
+            StmtEnum::Return(stmt) => visitor.visit_return_stmt(stmt),
             StmtEnum::None => panic!("Invalid statement type"),
         }
     }
@@ -95,6 +97,13 @@ pub(crate) struct FunctionStmt {
     pub(crate) body: Vec<StmtEnum>,
 }
 
+// Return statement: returns a value from a function
+#[derive(Clone)]
+pub(crate) struct ReturnStmt {
+    pub(crate) keyword: Token,
+    pub(crate) value: Option<Box<ExprEnum>>,
+}
+
 // Visitor trait for statements
 // Unlike expressions which return values, statements return a generic type T
 // (typically Result<(), String> for execution)
@@ -106,6 +115,7 @@ pub trait Visitor<T> {
     fn visit_if_stmt(&self, stmt: &IfStmt) -> T;
     fn visit_while_stmt(&self, stmt: &WhileStmt) -> T;
     fn visit_function_stmt(&self, stmt: &FunctionStmt) -> T;
+    fn visit_return_stmt(&self, stmt: &ReturnStmt) -> T;
 }
 
 #[cfg(test)]
@@ -151,6 +161,10 @@ mod tests {
 
         fn visit_function_stmt(&self, _stmt: &FunctionStmt) -> String {
             "function-stmt".to_string()
+        }
+
+        fn visit_return_stmt(&self, _stmt: &ReturnStmt) -> String {
+            "return-stmt".to_string()
         }
     }
 
@@ -495,7 +509,7 @@ mod tests {
     #[test]
     fn test_function_stmt_creation() {
         let name_token = Token::new(TokenType::Identifier, "foo".to_string(), None, 1);
-        
+
         // Params: a, b
         let params = vec![
             Token::new(TokenType::Identifier, "a".to_string(), None, 1),
@@ -525,6 +539,161 @@ mod tests {
                 assert_eq!(func_stmt.body.len(), 1);
             }
             _ => panic!("Expected Function statement"),
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 13: ReturnStmt creation with value
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_return_stmt_with_value() {
+        let keyword = Token::new(TokenType::Return, "return".to_string(), None, 1);
+        let value = Box::new(ExprEnum::Literal(Literal {
+            value: LiteralValue::Number(42.0),
+        }));
+
+        let stmt = StmtEnum::Return(ReturnStmt {
+            keyword: keyword.clone(),
+            value: Some(value),
+        });
+
+        match stmt {
+            StmtEnum::Return(ret_stmt) => {
+                assert_eq!(ret_stmt.keyword.lexeme, "return");
+                assert!(ret_stmt.value.is_some());
+                match ret_stmt.value.unwrap().as_ref() {
+                    ExprEnum::Literal(l) => match &l.value {
+                        LiteralValue::Number(n) => assert_eq!(*n, 42.0),
+                        _ => panic!("Expected number literal"),
+                    },
+                    _ => panic!("Expected literal expression"),
+                }
+            }
+            _ => panic!("Expected Return statement"),
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 14: ReturnStmt creation without value (nil return)
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_return_stmt_without_value() {
+        let keyword = Token::new(TokenType::Return, "return".to_string(), None, 1);
+
+        let stmt = StmtEnum::Return(ReturnStmt {
+            keyword: keyword.clone(),
+            value: None,
+        });
+
+        match stmt {
+            StmtEnum::Return(ret_stmt) => {
+                assert_eq!(ret_stmt.keyword.lexeme, "return");
+                assert!(ret_stmt.value.is_none());
+            }
+            _ => panic!("Expected Return statement"),
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 15: ReturnStmt with string value
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_return_stmt_string_value() {
+        let keyword = Token::new(TokenType::Return, "return".to_string(), None, 1);
+        let value = Box::new(ExprEnum::Literal(Literal {
+            value: LiteralValue::String("result".to_string()),
+        }));
+
+        let stmt = StmtEnum::Return(ReturnStmt {
+            keyword,
+            value: Some(value),
+        });
+
+        let printer = StmtPrinter;
+        let result = stmt.accept(&printer);
+        assert_eq!(result, "return-stmt");
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 16: ReturnStmt with boolean value
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_return_stmt_boolean_value() {
+        let keyword = Token::new(TokenType::Return, "return".to_string(), None, 1);
+        let value = Box::new(ExprEnum::Literal(Literal {
+            value: LiteralValue::Boolean(true),
+        }));
+
+        let stmt = StmtEnum::Return(ReturnStmt {
+            keyword,
+            value: Some(value),
+        });
+
+        match stmt {
+            StmtEnum::Return(ret_stmt) => {
+                assert!(ret_stmt.value.is_some());
+            }
+            _ => panic!("Expected Return statement"),
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 17: ReturnStmt with expression value
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_return_stmt_with_expression() {
+        use crate::expr::Binary;
+
+        let keyword = Token::new(TokenType::Return, "return".to_string(), None, 1);
+
+        let left = Box::new(ExprEnum::Literal(Literal {
+            value: LiteralValue::Number(10.0),
+        }));
+        let right = Box::new(ExprEnum::Literal(Literal {
+            value: LiteralValue::Number(20.0),
+        }));
+        let op = Token::new(TokenType::Plus, "+".to_string(), None, 1);
+
+        let value = Box::new(ExprEnum::Binary(Binary { left, op, right }));
+
+        let stmt = StmtEnum::Return(ReturnStmt {
+            keyword,
+            value: Some(value),
+        });
+
+        match stmt {
+            StmtEnum::Return(ret_stmt) => {
+                assert!(ret_stmt.value.is_some());
+                match ret_stmt.value.unwrap().as_ref() {
+                    ExprEnum::Binary(_) => {}
+                    _ => panic!("Expected binary expression"),
+                }
+            }
+            _ => panic!("Expected Return statement"),
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 18: ReturnStmt with variable reference
+    // -------------------------------------------------------------------------
+    #[test]
+    fn test_return_stmt_with_variable() {
+        use crate::expr::Variable;
+
+        let keyword = Token::new(TokenType::Return, "return".to_string(), None, 1);
+        let var_token = Token::new(TokenType::Identifier, "result".to_string(), None, 1);
+        let value = Box::new(ExprEnum::Variable(Variable { name: var_token }));
+
+        let stmt = StmtEnum::Return(ReturnStmt {
+            keyword,
+            value: Some(value),
+        });
+
+        match stmt {
+            StmtEnum::Return(ret_stmt) => {
+                assert!(ret_stmt.value.is_some());
+            }
+            _ => panic!("Expected Return statement"),
         }
     }
 }

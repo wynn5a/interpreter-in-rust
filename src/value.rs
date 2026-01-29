@@ -79,8 +79,12 @@ impl fmt::Display for LoxValue {
 
 pub struct NativeFunction {
     pub(crate) arity: usize,
-    pub(crate) fun:
-        Rc<dyn Fn(&crate::lox_interpreter::Interpreter, Vec<LoxValue>) -> Result<LoxValue, RuntimeError>>,
+    pub(crate) fun: Rc<
+        dyn Fn(
+            &crate::lox_interpreter::Interpreter,
+            Vec<LoxValue>,
+        ) -> Result<LoxValue, RuntimeError>,
+    >,
     pub(crate) name: String,
 }
 
@@ -147,7 +151,10 @@ impl LoxCallable for LoxFunction {
             environment.define(param.lexeme.clone(), arguments[i].clone());
         }
 
-        interpreter.execute_block(&self.declaration.body, environment)?;
-        Ok(LoxValue::Nil)
+        match interpreter.execute_block(&self.declaration.body, environment) {
+            Ok(()) => Ok(LoxValue::Nil),
+            Err(RuntimeError::Return(ret)) => Ok(ret.value),
+            Err(e) => Err(e),
+        }
     }
 }
