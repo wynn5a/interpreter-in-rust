@@ -1,4 +1,6 @@
-    use super::*;
+use super::*;
+use crate::error::RuntimeError;
+use crate::value::LoxValue;
 
     // -------------------------------------------------------------------------
     // Test: Display for Number values

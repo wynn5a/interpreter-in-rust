@@ -12,7 +12,7 @@
 //
 // =============================================================================
 
-use crate::lox_interpreter::LoxValue;
+use crate::value::LoxValue;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;

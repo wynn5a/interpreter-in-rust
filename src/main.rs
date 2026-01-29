@@ -7,6 +7,7 @@ use std::fs;
 use std::process;
 
 mod environment;
+mod error;
 mod expr;
 mod lox_interpreter;
 mod lox_parser;
@@ -14,6 +15,7 @@ mod lox_tokenizer;
 mod stmt;
 mod token;
 mod token_types;
+mod value;
 
 #[derive(Parser)]
 #[command(name = "lox")]
