@@ -1,6 +1,6 @@
 # Lox Interpreter in Rust
 
-Lox interpreter implementation for CodeCrafters challenge, following "Crafting Interpreters" book (Chapters 8-10). Binary-only crate with 6,532 lines across 9 source files.
+Lox interpreter implementation for CodeCrafters challenge, following "Crafting Interpreters" book (Chapters 8-10). Binary-only crate with 8,642 lines across 13 source files.
 
 ## Commands
 
@@ -9,7 +9,7 @@ Lox interpreter implementation for CodeCrafters challenge, following "Crafting I
 cargo build --release          # Builds to /tmp/codecrafters-interpreter-target
 
 # Test
-cargo test                     # 158+ unit tests embedded in source files
+cargo test                     # 304 unit tests embedded in source files
 
 # Run (local)
 ./your_program.sh tokenize <filename>   # Lexical analysis
@@ -33,15 +33,21 @@ cargo run --release -- run <file>
 
 ```
 src/
-├── main.rs            # CLI entry point (4 subcommands)
-├── lox_tokenizer.rs   # Lexer with Unicode support
-├── lox_parser.rs      # Recursive descent parser
-├── lox_interpreter.rs # Expression evaluator + statement executor
-├── environment.rs     # Variable scoping environment
-├── expr.rs            # Expression AST + Visitor pattern
-├── stmt.rs            # Statement AST + Visitor pattern
-├── token_types.rs     # TokenType enum
-└── token.rs           # Token struct
+├── main.rs                    # CLI entry point (4 subcommands via clap)
+├── lox_tokenizer.rs          # Lexer with Unicode support
+├── lox_parser/
+│   ├── mod.rs                # Recursive descent parser (543 lines)
+│   └── tests.rs              # Parser tests (1,427 lines)
+├── lox_interpreter/
+│   ├── mod.rs                # Expression evaluator + statement executor (345 lines)
+│   └── tests.rs              # Interpreter tests (3,511 lines)
+├── environment.rs            # Variable scoping environment
+├── error.rs                  # RuntimeError and Return exception types
+├── value.rs                  # LoxValue enum + LoxCallable trait
+├── expr.rs                   # Expression AST + Visitor pattern
+├── stmt.rs                   # Statement AST + Visitor pattern
+├── token_types.rs            # TokenType enum
+└── token.rs                  # Token struct
 ```
 
 ## Detailed Documentation

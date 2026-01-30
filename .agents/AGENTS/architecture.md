@@ -41,7 +41,7 @@ This project is designed for the CodeCrafters platform:
 - No `lib.rs`, binary-only crate
 
 **CLI Parsing:**
-- Manual argument handling, not `clap` (main.rs:17-118)
+- Uses `clap` with derive feature (main.rs:20-33)
 
 **Error Handling:**
 - Uses `unwrap()` instead of Result propagation (227 unwrap() calls)
