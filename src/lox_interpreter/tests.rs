@@ -1,10 +1,9 @@
 use super::*;
-use crate::environment::Environment;
 use crate::error::RuntimeError;
 use crate::expr::{
-    Assign, Binary, Call, ExprEnum, Grouping, Literal, LiteralValue, Logical, Unary, Variable,
+    Binary, Call, ExprEnum, Literal, LiteralValue, Variable,
 };
-use crate::stmt::{BlockStmt, ExpressionStmt, IfStmt, PrintStmt, StmtEnum, VarStmt, WhileStmt};
+use crate::stmt::StmtEnum;
 use crate::token::Token;
 use crate::token_types::TokenType;
 use crate::value::LoxValue;

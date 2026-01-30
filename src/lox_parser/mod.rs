@@ -186,25 +186,26 @@ impl LoxParser {
     fn for_statement(&mut self) -> StmtEnum {
         self.consume(LeftParen, "Expect '(' after 'for'.");
 
-        let initializer;
-        if self.match_tokens(&[Semicolon]) {
-            initializer = None;
+        let initializer = if self.match_tokens(&[Semicolon]) {
+            None
         } else if self.match_tokens(&[Var]) {
-            initializer = Some(self.var_declaration());
+            Some(self.var_declaration())
         } else {
-            initializer = Some(self.expression_statement());
-        }
+            Some(self.expression_statement())
+        };
 
-        let mut condition = None;
-        if !self.check(Semicolon) {
-            condition = Some(self.expression());
-        }
+        let condition = if self.check(Semicolon) {
+            None
+        } else {
+            Some(self.expression())
+        };
         self.consume(Semicolon, "Expect ';' after loop condition.");
 
-        let mut increment = None;
-        if !self.check(RightParen) {
-            increment = Some(self.expression());
-        }
+        let increment = if self.check(RightParen) {
+            None
+        } else {
+            Some(self.expression())
+        };
         self.consume(RightParen, "Expect ')' after for clauses.");
 
         let mut body = self.statement();
@@ -219,15 +220,19 @@ impl LoxParser {
         }
 
         if condition.is_none() {
-            condition = Some(Box::new(ExprEnum::Literal(Literal {
+            let condition = Box::new(ExprEnum::Literal(Literal {
                 value: LiteralValue::Boolean(true),
-            })));
+            }));
+            body = StmtEnum::While(crate::stmt::WhileStmt {
+                condition,
+                body: Box::new(body),
+            });
+        } else {
+            body = StmtEnum::While(crate::stmt::WhileStmt {
+                condition: condition.unwrap(),
+                body: Box::new(body),
+            });
         }
-
-        body = StmtEnum::While(crate::stmt::WhileStmt {
-            condition: condition.unwrap(),
-            body: Box::new(body),
-        });
 
         if let Some(init) = initializer {
             body = StmtEnum::Block(BlockStmt {
@@ -276,10 +281,10 @@ impl LoxParser {
 
     fn return_statement(&mut self) -> StmtEnum {
         let keyword = self.previous();
-        let value = if !self.check(Semicolon) {
-            Some(self.expression())
-        } else {
+        let value = if self.check(Semicolon) {
             None
+        } else {
+            Some(self.expression())
         };
         self.consume(Semicolon, "Expect ';' after return value.");
         StmtEnum::Return(ReturnStmt { keyword, value })
@@ -402,12 +407,8 @@ impl LoxParser {
     fn call(&mut self) -> Box<ExprEnum> {
         let mut expr = self.primary();
 
-        loop {
-            if self.match_tokens(&[LeftParen]) {
-                expr = self.finish_call(expr);
-            } else {
-                break;
-            }
+        while self.match_tokens(&[LeftParen]) {
+            expr = self.finish_call(expr);
         }
 
         expr
@@ -500,13 +501,12 @@ impl LoxParser {
     }
 
     fn match_tokens(&mut self, token_types: &[TokenType]) -> bool {
-        for token_type in token_types {
-            if !self.is_at_end() && self.peek().token_type == *token_type {
-                self.advance();
-                return true;
-            }
+        let matches = !self.is_at_end()
+            && token_types.iter().any(|t| self.peek().token_type == *t);
+        if matches {
+            self.advance();
         }
-        false
+        matches
     }
 
     fn peek(&self) -> Token {

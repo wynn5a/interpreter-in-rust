@@ -100,6 +100,7 @@ pub(crate) struct FunctionStmt {
 // Return statement: returns a value from a function
 #[derive(Clone)]
 pub(crate) struct ReturnStmt {
+    #[allow(dead_code)]
     pub(crate) keyword: Token,
     pub(crate) value: Option<Box<ExprEnum>>,
 }

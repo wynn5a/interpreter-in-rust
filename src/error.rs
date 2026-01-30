@@ -21,6 +21,7 @@ impl RuntimeError {
         RuntimeError::Error { message, line }
     }
 
+    #[allow(dead_code)]
     pub fn message(&self) -> &str {
         match self {
             RuntimeError::Error { message, .. } => message,
@@ -28,6 +29,7 @@ impl RuntimeError {
         }
     }
 
+    #[allow(dead_code)]
     pub fn line(&self) -> usize {
         match self {
             RuntimeError::Error { line, .. } => *line,

@@ -219,30 +219,27 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
     fn visit_call(&self, expr: &crate::expr::Call) -> Result<LoxValue, RuntimeError> {
         let callee = self.evaluate(&expr.callee)?;
 
-        let mut arguments = Vec::new();
-        for arg in &expr.arguments {
-            arguments.push(self.evaluate(arg)?);
-        }
+        let arguments: Result<Vec<_>, _> = expr.arguments.iter().map(|arg| self.evaluate(arg)).collect();
 
-        match callee {
-            LoxValue::Callable(function) => {
-                if arguments.len() != function.arity() {
-                    return Err(RuntimeError::new(
-                        format!(
-                            "Expected {} arguments but got {}.",
-                            function.arity(),
-                            arguments.len()
-                        ),
-                        expr.paren.line,
-                    ));
-                }
-                function.call(self, arguments)
-            }
-            _ => Err(RuntimeError::new(
+        let arguments = arguments?;
+        let LoxValue::Callable(function) = callee else {
+            return Err(RuntimeError::new(
                 "Can only call functions and classes.".to_string(),
                 expr.paren.line,
-            )),
+            ));
+        };
+
+        if arguments.len() != function.arity() {
+            return Err(RuntimeError::new(
+                format!(
+                    "Expected {} arguments but got {}.",
+                    function.arity(),
+                    arguments.len()
+                ),
+                expr.paren.line,
+            ));
         }
+        function.call(self, arguments)
     }
 
     fn visit_logical(&self, expr: &crate::expr::Logical) -> Result<LoxValue, RuntimeError> {
@@ -284,10 +281,9 @@ impl stmt::Visitor<Result<(), RuntimeError>> for Interpreter {
     }
 
     fn visit_var_stmt(&self, stmt: &stmt::VarStmt) -> Result<(), RuntimeError> {
-        let value = if let Some(initializer) = &stmt.initializer {
-            self.evaluate(initializer)?
-        } else {
-            LoxValue::Nil
+        let value = match &stmt.initializer {
+            Some(initializer) => self.evaluate(initializer)?,
+            None => LoxValue::Nil,
         };
 
         self.environment
@@ -336,10 +332,9 @@ impl stmt::Visitor<Result<(), RuntimeError>> for Interpreter {
     }
 
     fn visit_return_stmt(&self, stmt: &stmt::ReturnStmt) -> Result<(), RuntimeError> {
-        let value = if let Some(val_expr) = &stmt.value {
-            self.evaluate(val_expr)?
-        } else {
-            LoxValue::Nil
+        let value = match &stmt.value {
+            Some(val_expr) => self.evaluate(val_expr)?,
+            None => LoxValue::Nil,
         };
 
         Err(RuntimeError::Return(Return { value }))
