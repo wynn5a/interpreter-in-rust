@@ -121,15 +121,21 @@ impl LoxParser {
             }
         }
         self.consume(RightParen, "Expect ')' after parameters.");
-        self.consume(LeftBrace, &format!("Expect '{{' before {} body.", kind));
 
-        let body_stmt = self.block();
-        let body = match body_stmt {
-            StmtEnum::Block(b) => b.statements,
-            _ => Vec::new(),
-        };
+        // Only parse body if we haven't encountered an error yet
+        // This prevents infinite loops when function syntax is invalid
+        if !self.has_error {
+            self.consume(LeftBrace, &format!("Expect '{{' before {} body.", kind));
+            let body_stmt = self.block();
+            let body = match body_stmt {
+                StmtEnum::Block(b) => b.statements,
+                _ => Vec::new(),
+            };
 
-        StmtEnum::Function(crate::stmt::FunctionStmt { name, params, body })
+            StmtEnum::Function(crate::stmt::FunctionStmt { name, params, body })
+        } else {
+            StmtEnum::None
+        }
     }
 
     fn var_declaration(&mut self) -> StmtEnum {
