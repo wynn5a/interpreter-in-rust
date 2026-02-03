@@ -385,7 +385,7 @@ mod tests {
         let name_token = Token::new(TokenType::Identifier, "copy".to_string(), None, 1);
         let source_token = Token::new(TokenType::Identifier, "original".to_string(), None, 1);
 
-        let initializer = Box::new(ExprEnum::Variable(Variable { name: source_token }));
+        let initializer = Box::new(ExprEnum::Variable(Variable { id: 0, name: source_token }));
 
         let stmt = StmtEnum::Var(VarStmt {
             name: name_token,
@@ -683,7 +683,7 @@ mod tests {
 
         let keyword = Token::new(TokenType::Return, "return".to_string(), None, 1);
         let var_token = Token::new(TokenType::Identifier, "result".to_string(), None, 1);
-        let value = Box::new(ExprEnum::Variable(Variable { name: var_token }));
+        let value = Box::new(ExprEnum::Variable(Variable { id: 0, name: var_token }));
 
         let stmt = StmtEnum::Return(ReturnStmt {
             keyword,

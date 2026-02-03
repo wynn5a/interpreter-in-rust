@@ -12,6 +12,7 @@ mod expr;
 mod lox_interpreter;
 mod lox_parser;
 mod lox_tokenizer;
+mod resolver;
 mod stmt;
 mod token;
 mod token_types;
@@ -115,7 +116,14 @@ fn main() {
                 process::exit(65);
             }
 
-            let interpreter = Interpreter::new();
+            let resolver = resolver::Resolver::new();
+            if let Err(e) = resolver.resolve(&statements) {
+                eprintln!("{}", e);
+                process::exit(65);
+            }
+
+            let mut interpreter = Interpreter::new();
+            interpreter.set_locals(resolver.into_locals());
             if let Err(error) = interpreter.interpret(&statements) {
                 eprintln!("{}", error);
                 process::exit(70);

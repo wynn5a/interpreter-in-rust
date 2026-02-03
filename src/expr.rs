@@ -11,6 +11,13 @@
 // - Specific structs (Binary, Unary, Literal, etc.): Data holders for each node.
 
 use crate::token::Token;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static EXPR_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+pub fn next_expr_id() -> usize {
+    EXPR_ID_COUNTER.fetch_add(1, Ordering::SeqCst)
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LiteralValue {
@@ -68,6 +75,7 @@ pub(crate) struct Binary {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Assign {
+    pub(crate) id: usize,
     pub(crate) name: Token,
     pub(crate) value: Box<ExprEnum>,
 }
@@ -100,6 +108,7 @@ pub(crate) struct Grouping {
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Variable {
+    pub(crate) id: usize,
     pub(crate) name: Token,
 }
 
@@ -266,6 +275,7 @@ mod tests {
         let token = Token::new(TokenType::Identifier, "x".to_string(), None, 1);
 
         let expr = ExprEnum::Variable(Variable {
+            id: 0,
             name: token.clone(),
         });
 
@@ -286,7 +296,7 @@ mod tests {
     fn test_ast_printer_variable() {
         let token = Token::new(TokenType::Identifier, "myVar".to_string(), None, 1);
 
-        let expr = ExprEnum::Variable(Variable { name: token });
+        let expr = ExprEnum::Variable(Variable { id: 0, name: token });
 
         let ast_printer = AstPrinter {};
         let result = expr.accept(&ast_printer);
@@ -305,7 +315,7 @@ mod tests {
         let plus_token = Token::new(TokenType::Plus, "+".to_string(), None, 1);
 
         let expr = ExprEnum::Binary(Binary {
-            left: Box::new(ExprEnum::Variable(Variable { name: var_token })),
+            left: Box::new(ExprEnum::Variable(Variable { id: 0, name: var_token })),
             op: plus_token,
             right: Box::new(ExprEnum::Literal(Literal {
                 value: LiteralValue::Number(1.0),
@@ -330,9 +340,9 @@ mod tests {
         let plus_token = Token::new(TokenType::Plus, "+".to_string(), None, 1);
 
         let expr = ExprEnum::Binary(Binary {
-            left: Box::new(ExprEnum::Variable(Variable { name: x_token })),
+            left: Box::new(ExprEnum::Variable(Variable { id: 0, name: x_token })),
             op: plus_token,
-            right: Box::new(ExprEnum::Variable(Variable { name: y_token })),
+            right: Box::new(ExprEnum::Variable(Variable { id: 1, name: y_token })),
         });
 
         let ast_printer = AstPrinter {};
@@ -351,7 +361,7 @@ mod tests {
         let x_token = Token::new(TokenType::Identifier, "x".to_string(), None, 1);
 
         let expr = ExprEnum::Grouping(Grouping {
-            expression: Box::new(ExprEnum::Variable(Variable { name: x_token })),
+            expression: Box::new(ExprEnum::Variable(Variable { id: 0, name: x_token })),
         });
 
         let ast_printer = AstPrinter {};
@@ -372,7 +382,7 @@ mod tests {
 
         let expr = ExprEnum::Unary(Unary {
             op: minus_token,
-            right: Box::new(ExprEnum::Variable(Variable { name: x_token })),
+            right: Box::new(ExprEnum::Variable(Variable { id: 0, name: x_token })),
         });
 
         let ast_printer = AstPrinter {};
@@ -397,13 +407,13 @@ mod tests {
         let expr = ExprEnum::Binary(Binary {
             left: Box::new(ExprEnum::Grouping(Grouping {
                 expression: Box::new(ExprEnum::Binary(Binary {
-                    left: Box::new(ExprEnum::Variable(Variable { name: a_token })),
+                    left: Box::new(ExprEnum::Variable(Variable { id: 0, name: a_token })),
                     op: plus_token,
-                    right: Box::new(ExprEnum::Variable(Variable { name: b_token })),
+                    right: Box::new(ExprEnum::Variable(Variable { id: 1, name: b_token })),
                 })),
             })),
             op: star_token,
-            right: Box::new(ExprEnum::Variable(Variable { name: c_token })),
+            right: Box::new(ExprEnum::Variable(Variable { id: 2, name: c_token })),
         });
 
         let ast_printer = AstPrinter {};
@@ -422,12 +432,12 @@ mod tests {
 
         let ast_printer = AstPrinter {};
 
-        for name in test_cases {
+        for (i, name) in test_cases.iter().enumerate() {
             let token = Token::new(TokenType::Identifier, name.to_string(), None, 1);
-            let expr = ExprEnum::Variable(Variable { name: token });
+            let expr = ExprEnum::Variable(Variable { id: i, name: token });
 
             let result = expr.accept(&ast_printer);
-            assert_eq!(result, name);
+            assert_eq!(result, *name);
         }
     }
 
@@ -440,6 +450,7 @@ mod tests {
         let a_token = Token::new(TokenType::Identifier, "a".to_string(), None, 1);
 
         let expr = ExprEnum::Assign(Assign {
+            id: 0,
             name: a_token,
             value: Box::new(ExprEnum::Literal(Literal {
                 value: LiteralValue::Number(1.0),

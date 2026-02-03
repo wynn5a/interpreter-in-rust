@@ -1,8 +1,6 @@
 use super::*;
 use crate::error::RuntimeError;
-use crate::expr::{
-    Binary, Call, ExprEnum, Literal, LiteralValue, Variable,
-};
+use crate::expr::{Call, ExprEnum, Literal, LiteralValue, Variable};
 use crate::stmt::StmtEnum;
 use crate::token::Token;
 use crate::token_types::TokenType;
@@ -1630,6 +1628,7 @@ fn make_variable(name: &str) -> crate::expr::ExprEnum {
     use crate::token::Token;
     use crate::token_types::TokenType;
     crate::expr::ExprEnum::Variable(crate::expr::Variable {
+        id: 0,
         name: Token::new(TokenType::Identifier, name.to_string(), None, 1),
     })
 }
@@ -2805,6 +2804,7 @@ fn make_assign_expr(name: &str, value: crate::expr::ExprEnum) -> crate::expr::Ex
     use crate::token::Token;
     use crate::token_types::TokenType;
     crate::expr::ExprEnum::Assign(crate::expr::Assign {
+        id: 0,
         name: Token::new(TokenType::Identifier, name.to_string(), None, 1),
         value: Box::new(value),
     })
@@ -2873,6 +2873,7 @@ fn test_assignment_returns_value() {
 fn test_interpret_block_statement() {
     use crate::lox_parser::LoxParser;
     use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
 
     // {
     //   var x = 10;
@@ -2891,7 +2892,11 @@ fn test_interpret_block_statement() {
     assert!(!parser.has_error, "Parser reported error parsing block");
     assert_eq!(statements.len(), 1, "Expected 1 statement (block)");
 
-    let interpreter = Interpreter::new();
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
     let result = interpreter.interpret(&statements);
     assert!(result.is_ok(), "Interpreter execution failed");
 }
@@ -2900,6 +2905,7 @@ fn test_interpret_block_statement() {
 fn test_interpret_nested_blocks() {
     use crate::lox_parser::LoxParser;
     use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
 
     let source = "{ var x = 10; { print x; } }";
 
@@ -2911,7 +2917,11 @@ fn test_interpret_nested_blocks() {
     let statements = parser.parse();
     assert!(!parser.has_error);
 
-    let interpreter = Interpreter::new();
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
     let result = interpreter.interpret(&statements);
     assert!(result.is_ok());
 }
@@ -3078,6 +3088,7 @@ fn test_interpret_while_loop_with_block() {
 fn test_interpret_for_loop() {
     use crate::lox_parser::LoxParser;
     use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
 
     // for (var i = 0; i < 3; i = i + 1) { sum = sum + i; }
     // i=0, sum=0 -> sum=0, i=1
@@ -3094,11 +3105,15 @@ fn test_interpret_for_loop() {
     let statements = parser.parse();
     assert!(!parser.has_error);
 
-    let interpreter = Interpreter::new();
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
     let result = interpreter.interpret(&statements);
     assert!(result.is_ok());
 
-    let sum = interpreter.environment.borrow().borrow().get("sum");
+    let sum = interpreter.globals.borrow().get("sum");
     assert_eq!(sum.unwrap(), LoxValue::Number(3.0));
 }
 
@@ -3228,6 +3243,7 @@ fn test_interpret_function_call_side_effect() {
 fn test_interpret_function_scope_closure() {
     use crate::lox_parser::LoxParser;
     use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
 
     // var global = "global";
     // fun check() {
@@ -3242,58 +3258,54 @@ fn test_interpret_function_scope_closure() {
     let statements = parser.parse();
     assert!(!parser.has_error);
 
-    let interpreter = Interpreter::new();
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
     let result = interpreter.interpret(&statements);
     assert!(result.is_ok());
 
-    let val = interpreter.environment.borrow().borrow().get("global");
+    let val = interpreter.globals.borrow().get("global");
     assert_eq!(val.unwrap(), LoxValue::String("global touched".to_string()));
 }
 
 #[test]
 fn test_function_with_return_value() {
-    let interpreter = Interpreter::new();
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
 
-    let fun_decl = StmtEnum::Function(crate::stmt::FunctionStmt {
-        name: Token::new(TokenType::Identifier, "add".to_string(), None, 1),
-        params: vec![
-            Token::new(TokenType::Identifier, "a".to_string(), None, 1),
-            Token::new(TokenType::Identifier, "b".to_string(), None, 1),
-        ],
-        body: vec![StmtEnum::Return(crate::stmt::ReturnStmt {
-            keyword: Token::new(TokenType::Return, "return".to_string(), None, 1),
-            value: Some(Box::new(ExprEnum::Binary(Binary {
-                left: Box::new(ExprEnum::Variable(Variable {
-                    name: Token::new(TokenType::Identifier, "a".to_string(), None, 1),
-                })),
-                op: Token::new(TokenType::Plus, "+".to_string(), None, 1),
-                right: Box::new(ExprEnum::Variable(Variable {
-                    name: Token::new(TokenType::Identifier, "b".to_string(), None, 1),
-                })),
-            }))),
-        })],
-    });
+    let source = "fun add(a, b) { return a + b; } add(3, 4);";
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
 
-    interpreter.interpret(&[fun_decl]).unwrap();
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
 
-    let call_expr = ExprEnum::Call(Call {
-        callee: Box::new(ExprEnum::Variable(Variable {
-            name: Token::new(TokenType::Identifier, "add".to_string(), None, 1),
-        })),
-        paren: Token::new(TokenType::RightParen, ")".to_string(), None, 1),
-        arguments: vec![
-            ExprEnum::Literal(Literal {
-                value: LiteralValue::Number(3.0),
-            }),
-            ExprEnum::Literal(Literal {
-                value: LiteralValue::Number(4.0),
-            }),
-        ],
-    });
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
 
-    let result = interpreter.evaluate(&call_expr);
+    // Define a variable to capture the result
+    let source_with_result = "fun add(a, b) { return a + b; } var result = add(3, 4);";
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source_with_result);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), LoxValue::Number(7.0));
+
+    let val = interpreter.globals.borrow().get("result");
+    assert_eq!(val.unwrap(), LoxValue::Number(7.0));
 }
 
 #[test]
@@ -3310,6 +3322,7 @@ fn test_function_without_explicit_return() {
 
     let call_expr = ExprEnum::Call(Call {
         callee: Box::new(ExprEnum::Variable(Variable {
+            id: 0,
             name: Token::new(TokenType::Identifier, "doNothing".to_string(), None, 1),
         })),
         paren: Token::new(TokenType::RightParen, ")".to_string(), None, 1),
@@ -3338,6 +3351,7 @@ fn test_return_without_value() {
 
     let call_expr = ExprEnum::Call(Call {
         callee: Box::new(ExprEnum::Variable(Variable {
+            id: 0,
             name: Token::new(TokenType::Identifier, "returnNil".to_string(), None, 1),
         })),
         paren: Token::new(TokenType::RightParen, ")".to_string(), None, 1),
@@ -3376,6 +3390,7 @@ fn test_early_return() {
 
     let call_expr = ExprEnum::Call(Call {
         callee: Box::new(ExprEnum::Variable(Variable {
+            id: 0,
             name: Token::new(TokenType::Identifier, "earlyReturn".to_string(), None, 1),
         })),
         paren: Token::new(TokenType::RightParen, ")".to_string(), None, 1),
@@ -3406,6 +3421,7 @@ fn test_return_string_value() {
 
     let call_expr = ExprEnum::Call(Call {
         callee: Box::new(ExprEnum::Variable(Variable {
+            id: 0,
             name: Token::new(TokenType::Identifier, "getMessage".to_string(), None, 1),
         })),
         paren: Token::new(TokenType::RightParen, ")".to_string(), None, 1),
@@ -3439,6 +3455,7 @@ fn test_return_boolean_value() {
 
     let call_expr = ExprEnum::Call(Call {
         callee: Box::new(ExprEnum::Variable(Variable {
+            id: 0,
             name: Token::new(TokenType::Identifier, "getTrue".to_string(), None, 1),
         })),
         paren: Token::new(TokenType::RightParen, ")".to_string(), None, 1),
@@ -3452,68 +3469,41 @@ fn test_return_boolean_value() {
 
 #[test]
 fn test_return_in_if_statement() {
-    let interpreter = Interpreter::new();
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
 
-    let fun_decl = StmtEnum::Function(crate::stmt::FunctionStmt {
-        name: Token::new(TokenType::Identifier, "max".to_string(), None, 1),
-        params: vec![
-            Token::new(TokenType::Identifier, "a".to_string(), None, 1),
-            Token::new(TokenType::Identifier, "b".to_string(), None, 1),
-        ],
-        body: vec![
-            StmtEnum::If(crate::stmt::IfStmt {
-                condition: Box::new(ExprEnum::Binary(Binary {
-                    left: Box::new(ExprEnum::Variable(Variable {
-                        name: Token::new(TokenType::Identifier, "a".to_string(), None, 1),
-                    })),
-                    op: Token::new(TokenType::Greater, ">".to_string(), None, 1),
-                    right: Box::new(ExprEnum::Variable(Variable {
-                        name: Token::new(TokenType::Identifier, "b".to_string(), None, 1),
-                    })),
-                })),
-                then_branch: Box::new(StmtEnum::Return(crate::stmt::ReturnStmt {
-                    keyword: Token::new(TokenType::Return, "return".to_string(), None, 1),
-                    value: Some(Box::new(ExprEnum::Variable(Variable {
-                        name: Token::new(TokenType::Identifier, "a".to_string(), None, 1),
-                    }))),
-                })),
-                else_branch: None,
-            }),
-            StmtEnum::Return(crate::stmt::ReturnStmt {
-                keyword: Token::new(TokenType::Return, "return".to_string(), None, 1),
-                value: Some(Box::new(ExprEnum::Variable(Variable {
-                    name: Token::new(TokenType::Identifier, "b".to_string(), None, 1),
-                }))),
-            }),
-        ],
-    });
+    let source = r#"
+        fun max(a, b) {
+            if (a > b) return a;
+            return b;
+        }
+        var result = max(10, 5);
+    "#;
 
-    interpreter.interpret(&[fun_decl]).unwrap();
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
 
-    let call_expr = ExprEnum::Call(Call {
-        callee: Box::new(ExprEnum::Variable(Variable {
-            name: Token::new(TokenType::Identifier, "max".to_string(), None, 1),
-        })),
-        paren: Token::new(TokenType::RightParen, ")".to_string(), None, 1),
-        arguments: vec![
-            ExprEnum::Literal(Literal {
-                value: LiteralValue::Number(10.0),
-            }),
-            ExprEnum::Literal(Literal {
-                value: LiteralValue::Number(5.0),
-            }),
-        ],
-    });
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
 
-    let result = interpreter.evaluate(&call_expr);
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
     assert!(result.is_ok());
-    assert_eq!(result.unwrap(), LoxValue::Number(10.0));
+
+    let val = interpreter.globals.borrow().get("result");
+    assert_eq!(val.unwrap(), LoxValue::Number(10.0));
 }
 
 #[test]
 fn test_higher_order_function_closure() {
     use crate::lox_parser::LoxParser;
     use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
 
     // fun makeGreeter() {
     //   fun greet(name) {
@@ -3540,10 +3530,352 @@ fn test_higher_order_function_closure() {
     let statements = parser.parse();
     assert!(!parser.has_error);
 
-    let interpreter = Interpreter::new();
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
     let result = interpreter.interpret(&statements);
     assert!(result.is_ok());
 
-    let val = interpreter.environment.borrow().borrow().get("result");
+    let val = interpreter.globals.borrow().get("result");
     assert_eq!(val.unwrap(), LoxValue::String("Hello Bob".to_string()));
+}
+
+// =========================================================================
+// CLOSURE AND RESOLUTION INTEGRATION TESTS
+// =========================================================================
+
+#[test]
+fn test_closure_captures_correct_binding() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    // This is the key test case from the plan - function f should capture
+    // the global 'variable', not the local one declared after f
+    let source = r#"
+        var variable = "global";
+        var result1 = "";
+        var result2 = "";
+        {
+            fun f() {
+                return variable;
+            }
+            result1 = f();
+            var variable = "local";
+            result2 = f();
+        }
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+
+    // Both calls should return "global" because f captures the global binding
+    let result1 = interpreter.globals.borrow().get("result1");
+    let result2 = interpreter.globals.borrow().get("result2");
+    assert_eq!(result1.unwrap(), LoxValue::String("global".to_string()));
+    assert_eq!(result2.unwrap(), LoxValue::String("global".to_string()));
+}
+
+#[test]
+fn test_closure_with_mutable_state() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    // Test that closures can capture and mutate variables
+    let source = r#"
+        fun makeCounter() {
+            var count = 0;
+            fun counter() {
+                count = count + 1;
+                return count;
+            }
+            return counter;
+        }
+        var counter = makeCounter();
+        var a = counter();
+        var b = counter();
+        var c = counter();
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+
+    assert_eq!(interpreter.globals.borrow().get("a").unwrap(), LoxValue::Number(1.0));
+    assert_eq!(interpreter.globals.borrow().get("b").unwrap(), LoxValue::Number(2.0));
+    assert_eq!(interpreter.globals.borrow().get("c").unwrap(), LoxValue::Number(3.0));
+}
+
+#[test]
+fn test_multiple_closures_share_environment() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    // Two closures from same call share the same captured environment
+    let source = r#"
+        fun makePair() {
+            var x = 0;
+            fun getter() { return x; }
+            fun setter(value) { x = value; }
+            return getter;  // Note: Lox can only return one value
+        }
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_nested_scope_variable_resolution() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    let source = r#"
+        var a = "global a";
+        var b = "global b";
+        var c = "global c";
+        var result_inner_a = "";
+        var result_inner_b = "";
+        var result_inner_c = "";
+        var result_outer_a = "";
+        var result_outer_b = "";
+        var result_outer_c = "";
+        {
+            var a = "outer a";
+            var b = "outer b";
+            {
+                var a = "inner a";
+                result_inner_a = a;
+                result_inner_b = b;
+                result_inner_c = c;
+            }
+            result_outer_a = a;
+            result_outer_b = b;
+            result_outer_c = c;
+        }
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+
+    // Inner scope should see: inner a, outer b, global c
+    assert_eq!(
+        interpreter.globals.borrow().get("result_inner_a").unwrap(),
+        LoxValue::String("inner a".to_string())
+    );
+    assert_eq!(
+        interpreter.globals.borrow().get("result_inner_b").unwrap(),
+        LoxValue::String("outer b".to_string())
+    );
+    assert_eq!(
+        interpreter.globals.borrow().get("result_inner_c").unwrap(),
+        LoxValue::String("global c".to_string())
+    );
+
+    // Outer scope should see: outer a, outer b, global c
+    assert_eq!(
+        interpreter.globals.borrow().get("result_outer_a").unwrap(),
+        LoxValue::String("outer a".to_string())
+    );
+    assert_eq!(
+        interpreter.globals.borrow().get("result_outer_b").unwrap(),
+        LoxValue::String("outer b".to_string())
+    );
+    assert_eq!(
+        interpreter.globals.borrow().get("result_outer_c").unwrap(),
+        LoxValue::String("global c".to_string())
+    );
+}
+
+#[test]
+fn test_recursive_function() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    let source = r#"
+        fun fib(n) {
+            if (n <= 1) return n;
+            return fib(n - 1) + fib(n - 2);
+        }
+        var result = fib(10);
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+
+    // fib(10) = 55
+    assert_eq!(
+        interpreter.globals.borrow().get("result").unwrap(),
+        LoxValue::Number(55.0)
+    );
+}
+
+#[test]
+fn test_assignment_in_nested_scope() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    let source = r#"
+        var x = "initial";
+        {
+            x = "modified in block";
+        }
+        var result = x;
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+
+    assert_eq!(
+        interpreter.globals.borrow().get("result").unwrap(),
+        LoxValue::String("modified in block".to_string())
+    );
+}
+
+#[test]
+fn test_closure_in_loop() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    let source = r#"
+        var sum = 0;
+        fun adder(n) {
+            sum = sum + n;
+        }
+        for (var i = 1; i <= 5; i = i + 1) {
+            adder(i);
+        }
+        var result = sum;
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+
+    // 1 + 2 + 3 + 4 + 5 = 15
+    assert_eq!(
+        interpreter.globals.borrow().get("result").unwrap(),
+        LoxValue::Number(15.0)
+    );
+}
+
+#[test]
+fn test_function_returning_function() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    let source = r#"
+        fun makeAdder(x) {
+            fun adder(y) {
+                return x + y;
+            }
+            return adder;
+        }
+        var add5 = makeAdder(5);
+        var result = add5(10);
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+
+    // add5(10) = 5 + 10 = 15
+    assert_eq!(
+        interpreter.globals.borrow().get("result").unwrap(),
+        LoxValue::Number(15.0)
+    );
 }

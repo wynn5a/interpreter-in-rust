@@ -12,6 +12,7 @@
 // =============================================================================
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -23,13 +24,18 @@ use crate::value::{LoxFunction, LoxValue, NativeFunction};
 
 /// Interpreter evaluates Lox expressions and executes statements.
 pub struct Interpreter {
+    /// The global environment (kept for looking up global variables).
+    pub(crate) globals: Rc<RefCell<Environment>>,
+    /// The current environment (changes as we enter/exit scopes).
     pub(crate) environment: RefCell<Rc<RefCell<Environment>>>,
+    /// Maps expression IDs to resolved scope depths.
+    locals: HashMap<usize, usize>,
 }
 
 impl Interpreter {
     /// Creates a new interpreter with an empty environment.
     pub fn new() -> Self {
-        let env = Rc::new(RefCell::new(Environment::new()));
+        let globals = Rc::new(RefCell::new(Environment::new()));
 
         // Define clock() native function
         let clock_fun = NativeFunction {
@@ -44,11 +50,41 @@ impl Interpreter {
             }),
         };
 
-        env.borrow_mut()
+        globals
+            .borrow_mut()
             .define("clock".to_string(), LoxValue::Callable(Rc::new(clock_fun)));
 
         Interpreter {
-            environment: RefCell::new(env),
+            globals: Rc::clone(&globals),
+            environment: RefCell::new(globals),
+            locals: HashMap::new(),
+        }
+    }
+
+    /// Set the resolved variable depths from the resolver.
+    pub fn set_locals(&mut self, locals: HashMap<usize, usize>) {
+        self.locals = locals;
+    }
+
+    /// Look up a variable, using the resolved depth if available.
+    fn look_up_variable(
+        &self,
+        name: &str,
+        expr_id: usize,
+        line: usize,
+    ) -> Result<LoxValue, RuntimeError> {
+        if let Some(&distance) = self.locals.get(&expr_id) {
+            self.environment
+                .borrow()
+                .borrow()
+                .get_at(distance, name)
+                .map_err(|msg| RuntimeError::new(msg, line))
+        } else {
+            // Not in locals - must be a global variable
+            self.globals
+                .borrow()
+                .get(name)
+                .map_err(|msg| RuntimeError::new(msg, line))
         }
     }
 
@@ -124,12 +160,19 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
     fn visit_assign(&self, expr: &crate::expr::Assign) -> Result<LoxValue, RuntimeError> {
         let value = self.evaluate(&expr.value)?;
 
-        match self
-            .environment
-            .borrow()
-            .borrow_mut()
-            .assign(&expr.name.lexeme, value.clone())
-        {
+        let result = if let Some(&distance) = self.locals.get(&expr.id) {
+            self.environment
+                .borrow()
+                .borrow_mut()
+                .assign_at(distance, &expr.name.lexeme, value.clone())
+        } else {
+            // Not in locals - must be a global variable
+            self.globals
+                .borrow_mut()
+                .assign(&expr.name.lexeme, value.clone())
+        };
+
+        match result {
             Ok(_) => Ok(value),
             Err(msg) => Err(RuntimeError::new(msg, expr.name.line)),
         }
@@ -209,11 +252,7 @@ impl crate::expr::Visitor<Result<LoxValue, RuntimeError>> for Interpreter {
     }
 
     fn visit_variable(&self, expr: &crate::expr::Variable) -> Result<LoxValue, RuntimeError> {
-        self.environment
-            .borrow()
-            .borrow()
-            .get(&expr.name.lexeme)
-            .map_err(|msg| RuntimeError::new(msg, expr.name.line))
+        self.look_up_variable(&expr.name.lexeme, expr.id, expr.name.line)
     }
 
     fn visit_call(&self, expr: &crate::expr::Call) -> Result<LoxValue, RuntimeError> {

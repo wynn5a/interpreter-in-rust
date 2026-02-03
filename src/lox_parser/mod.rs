@@ -28,7 +28,7 @@
 // primary        → NUMBER | STRING | "true" | "false" | "nil"
 //                | "(" expression ")" | IDENTIFIER ;
 
-use crate::expr::{Assign, Binary, ExprEnum, Grouping, Literal, LiteralValue, Unary, Variable};
+use crate::expr::{Assign, Binary, ExprEnum, Grouping, Literal, LiteralValue, Unary, Variable, next_expr_id};
 use crate::stmt::{BlockStmt, ExpressionStmt, PrintStmt, ReturnStmt, StmtEnum, VarStmt};
 use crate::token::Token;
 use crate::token_types::TokenType::{self, *};
@@ -310,6 +310,7 @@ impl LoxParser {
             match *expr {
                 ExprEnum::Variable(v) => {
                     return Box::new(ExprEnum::Assign(Assign {
+                        id: next_expr_id(),
                         name: v.name,
                         value,
                     }));
@@ -468,6 +469,7 @@ impl LoxParser {
         }
         if self.match_tokens(&[Identifier]) {
             return Box::new(ExprEnum::Variable(Variable {
+                id: next_expr_id(),
                 name: self.previous(),
             }));
         }
