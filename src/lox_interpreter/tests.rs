@@ -3509,3 +3509,41 @@ fn test_return_in_if_statement() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), LoxValue::Number(10.0));
 }
+
+#[test]
+fn test_higher_order_function_closure() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+
+    // fun makeGreeter() {
+    //   fun greet(name) {
+    //     return "Hello " + name;
+    //   }
+    //   return greet;
+    // }
+    // var sayHello = makeGreeter();
+    // var result = sayHello("Bob");
+    let source = r#"
+        fun makeGreeter() {
+          fun greet(name) {
+            return "Hello " + name;
+          }
+          return greet;
+        }
+        var sayHello = makeGreeter();
+        var result = sayHello("Bob");
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let interpreter = Interpreter::new();
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+
+    let val = interpreter.environment.borrow().borrow().get("result");
+    assert_eq!(val.unwrap(), LoxValue::String("Hello Bob".to_string()));
+}
