@@ -16,6 +16,13 @@ use std::collections::HashMap;
 use crate::expr::{self, ExprEnum};
 use crate::stmt::{self, StmtEnum};
 
+/// Tracks whether we're currently inside a function during resolution.
+#[derive(Clone, Copy, PartialEq)]
+enum FunctionType {
+    None,
+    Function,
+}
+
 /// The Resolver performs a single pass over the AST to resolve variable bindings.
 /// It tracks which variables are in scope and how many scopes away they are.
 pub struct Resolver {
@@ -25,6 +32,8 @@ pub struct Resolver {
     /// Maps expression IDs to the number of scopes between the current scope
     /// and the scope where the variable is defined.
     pub locals: RefCell<HashMap<usize, usize>>,
+    /// Tracks whether we're currently inside a function.
+    current_function: RefCell<FunctionType>,
 }
 
 impl Resolver {
@@ -32,6 +41,7 @@ impl Resolver {
         Resolver {
             scopes: RefCell::new(Vec::new()),
             locals: RefCell::new(HashMap::new()),
+            current_function: RefCell::new(FunctionType::None),
         }
     }
 
@@ -65,16 +75,16 @@ impl Resolver {
     }
 
     /// Declare a variable in the current scope (marks it as "not yet defined").
-    fn declare(&self, name: &str) -> Result<(), String> {
+    fn declare(&self, name: &crate::token::Token) -> Result<(), String> {
         let mut scopes = self.scopes.borrow_mut();
         if let Some(scope) = scopes.last_mut() {
-            if scope.contains_key(name) {
+            if scope.contains_key(&name.lexeme) {
                 return Err(format!(
-                    "Already a variable with name '{}' in this scope.",
-                    name
+                    "[line {}] Error at '{}': Already a variable with this name in this scope.",
+                    name.line, name.lexeme
                 ));
             }
-            scope.insert(name.to_string(), false);
+            scope.insert(name.lexeme.clone(), false);
         }
         Ok(())
     }
@@ -100,14 +110,19 @@ impl Resolver {
         // We don't add it to locals; the interpreter will look it up globally.
     }
 
-    fn resolve_function(&self, stmt: &stmt::FunctionStmt) -> Result<(), String> {
+    fn resolve_function(&self, stmt: &stmt::FunctionStmt, fn_type: FunctionType) -> Result<(), String> {
+        let enclosing_function = *self.current_function.borrow();
+        *self.current_function.borrow_mut() = fn_type;
+
         self.begin_scope();
         for param in &stmt.params {
-            self.declare(&param.lexeme)?;
+            self.declare(param)?;
             self.define(&param.lexeme);
         }
         self.resolve(&stmt.body)?;
         self.end_scope();
+
+        *self.current_function.borrow_mut() = enclosing_function;
         Ok(())
     }
 }
@@ -123,8 +138,8 @@ impl expr::Visitor<Result<(), String>> for Resolver {
             if let Some(&defined) = scope.get(&expr.name.lexeme) {
                 if !defined {
                     return Err(format!(
-                        "Can't read local variable '{}' in its own initializer.",
-                        expr.name.lexeme
+                        "[line {}] Error at '{}': Can't read local variable in its own initializer.",
+                        expr.name.line, expr.name.lexeme
                     ));
                 }
             }
@@ -188,7 +203,7 @@ impl stmt::Visitor<Result<(), String>> for Resolver {
     }
 
     fn visit_var_stmt(&self, stmt: &stmt::VarStmt) -> Result<(), String> {
-        self.declare(&stmt.name.lexeme)?;
+        self.declare(&stmt.name)?;
         if let Some(initializer) = &stmt.initializer {
             self.resolve_expr(initializer)?;
         }
@@ -197,9 +212,9 @@ impl stmt::Visitor<Result<(), String>> for Resolver {
     }
 
     fn visit_function_stmt(&self, stmt: &stmt::FunctionStmt) -> Result<(), String> {
-        self.declare(&stmt.name.lexeme)?;
+        self.declare(&stmt.name)?;
         self.define(&stmt.name.lexeme);
-        self.resolve_function(stmt)?;
+        self.resolve_function(stmt, FunctionType::Function)?;
         Ok(())
     }
 
@@ -223,6 +238,12 @@ impl stmt::Visitor<Result<(), String>> for Resolver {
     }
 
     fn visit_return_stmt(&self, stmt: &stmt::ReturnStmt) -> Result<(), String> {
+        if *self.current_function.borrow() == FunctionType::None {
+            return Err(format!(
+                "[line {}] Error at 'return': Can't return from top-level code.",
+                stmt.keyword.line
+            ));
+        }
         if let Some(value) = &stmt.value {
             self.resolve_expr(value)?;
         }
@@ -719,5 +740,90 @@ mod tests {
         let resolver = Resolver::new();
         let result = resolver.resolve(&statements);
         assert!(result.is_ok());
+    }
+
+    // =========================================================================
+    // Invalid return statement tests
+    // =========================================================================
+
+    #[test]
+    fn test_return_from_top_level_error() {
+        // Note: The input starts without a leading newline so line numbers match
+        let statements = parse(
+"fun foo() {
+  if (true) {
+    return \"early return\";
+  }
+
+  for (var i = 0; i < 10; i = i + 1) {
+    return \"loop return\";
+  }
+}
+
+if (true) {
+  return \"conditional return\";
+}",
+        );
+        let resolver = Resolver::new();
+        let result = resolver.resolve(&statements);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Can't return from top-level code"));
+        assert!(err.contains("[line 12]"));
+    }
+
+    #[test]
+    fn test_return_inside_function_is_valid() {
+        let statements = parse(
+            r#"
+            fun test() {
+                return 42;
+            }
+            "#,
+        );
+        let resolver = Resolver::new();
+        let result = resolver.resolve(&statements);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_return_in_nested_if_inside_function_is_valid() {
+        let statements = parse(
+            r#"
+            fun test() {
+                if (true) {
+                    return "ok";
+                }
+            }
+            "#,
+        );
+        let resolver = Resolver::new();
+        let result = resolver.resolve(&statements);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_return_in_while_inside_function_is_valid() {
+        let statements = parse(
+            r#"
+            fun test() {
+                while (true) {
+                    return "ok";
+                }
+            }
+            "#,
+        );
+        let resolver = Resolver::new();
+        let result = resolver.resolve(&statements);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_top_level_return_error() {
+        let statements = parse("return 42;");
+        let resolver = Resolver::new();
+        let result = resolver.resolve(&statements);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Can't return from top-level code"));
     }
 }
