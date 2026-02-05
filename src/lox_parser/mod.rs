@@ -29,7 +29,7 @@
 //                | "(" expression ")" | IDENTIFIER ;
 
 use crate::expr::{Assign, Binary, ExprEnum, Grouping, Literal, LiteralValue, Unary, Variable, next_expr_id};
-use crate::stmt::{BlockStmt, ExpressionStmt, PrintStmt, ReturnStmt, StmtEnum, VarStmt};
+use crate::stmt::{BlockStmt, ClassStmt, ExpressionStmt, PrintStmt, ReturnStmt, StmtEnum, VarStmt};
 use crate::token::Token;
 use crate::token_types::TokenType::{self, *};
 
@@ -94,6 +94,9 @@ impl LoxParser {
     }
 
     fn declaration(&mut self) -> StmtEnum {
+        if self.match_tokens(&[Class]) {
+            return self.class_declaration();
+        }
         if self.match_tokens(&[Fun]) {
             return self.function("function");
         }
@@ -101,6 +104,15 @@ impl LoxParser {
             return self.var_declaration();
         }
         self.statement()
+    }
+
+    fn class_declaration(&mut self) -> StmtEnum {
+        self.consume(Identifier, "Expect class name.");
+        let name = self.previous();
+        self.consume(LeftBrace, "Expect '{' before class body.");
+        // Methods would be parsed here in later stages
+        self.consume(RightBrace, "Expect '}' after class body.");
+        StmtEnum::Class(ClassStmt { name })
     }
 
     fn function(&mut self, kind: &str) -> StmtEnum {

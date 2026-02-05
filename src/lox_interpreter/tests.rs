@@ -3879,3 +3879,146 @@ fn test_function_returning_function() {
         LoxValue::Number(15.0)
     );
 }
+
+// =============================================================================
+// CLASS DECLARATION TESTS
+// =============================================================================
+
+#[test]
+fn test_class_declaration_basic() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    // Test basic class declaration
+    let source = r#"
+        class Robot {}
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+
+    // The class should be stored in the environment
+    let class_value = interpreter.globals.borrow().get("Robot").unwrap();
+    assert!(matches!(class_value, LoxValue::Callable(_)));
+}
+
+#[test]
+fn test_class_declaration_display() {
+    // Test that classes display their name when printed
+    use crate::value::LoxClass;
+
+    let class = LoxClass {
+        name: "Robot".to_string(),
+    };
+    assert_eq!(format!("{}", class), "Robot");
+}
+
+#[test]
+fn test_multiple_class_declarations() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    // Test multiple class declarations
+    let source = r#"
+        class Robot {}
+        class Wizard {}
+        class Dragon {}
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+
+    // All classes should be stored in the environment
+    assert!(interpreter.globals.borrow().get("Robot").is_ok());
+    assert!(interpreter.globals.borrow().get("Wizard").is_ok());
+    assert!(interpreter.globals.borrow().get("Dragon").is_ok());
+}
+
+#[test]
+fn test_class_stored_in_variable() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    // Test that a class can be stored in another variable
+    let source = r#"
+        class Robot {}
+        var MyClass = Robot;
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+
+    // MyClass should reference the same class
+    let my_class = interpreter.globals.borrow().get("MyClass").unwrap();
+    assert!(matches!(my_class, LoxValue::Callable(_)));
+}
+
+#[test]
+fn test_class_in_local_scope() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    // Test class declaration in a local scope
+    let source = r#"
+        var outsideClass;
+        {
+            class LocalClass {}
+            outsideClass = LocalClass;
+        }
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+
+    // outsideClass should have captured the local class
+    let outside = interpreter.globals.borrow().get("outsideClass").unwrap();
+    assert!(matches!(outside, LoxValue::Callable(_)));
+}

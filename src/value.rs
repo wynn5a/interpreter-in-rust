@@ -158,3 +158,40 @@ impl LoxCallable for LoxFunction {
         }
     }
 }
+
+// =============================================================================
+// LOX CLASS
+// =============================================================================
+
+/// Represents a Lox class at runtime.
+#[derive(Clone)]
+pub struct LoxClass {
+    pub name: String,
+}
+
+impl fmt::Debug for LoxClass {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+impl fmt::Display for LoxClass {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+impl LoxCallable for LoxClass {
+    fn arity(&self) -> usize {
+        0
+    }
+
+    fn call(
+        &self,
+        _interpreter: &crate::lox_interpreter::Interpreter,
+        _arguments: Vec<LoxValue>,
+    ) -> Result<LoxValue, RuntimeError> {
+        // For now, classes are not instantiable - instances will be added later
+        Ok(LoxValue::Nil)
+    }
+}

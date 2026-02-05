@@ -255,6 +255,12 @@ impl stmt::Visitor<Result<(), String>> for Resolver {
         self.resolve_stmt(&stmt.body)?;
         Ok(())
     }
+
+    fn visit_class_stmt(&self, stmt: &stmt::ClassStmt) -> Result<(), String> {
+        self.declare(&stmt.name)?;
+        self.define(&stmt.name.lexeme);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -825,5 +831,89 @@ if (true) {
         let result = resolver.resolve(&statements);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Can't return from top-level code"));
+    }
+
+    // =========================================================================
+    // Class declaration tests
+    // =========================================================================
+
+    #[test]
+    fn test_class_declaration_basic() {
+        let statements = parse("class Robot {}");
+        let resolver = Resolver::new();
+        let result = resolver.resolve(&statements);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_multiple_class_declarations() {
+        let statements = parse(
+            r#"
+            class Robot {}
+            class Wizard {}
+            class Dragon {}
+            "#,
+        );
+        let resolver = Resolver::new();
+        let result = resolver.resolve(&statements);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_class_in_block_scope() {
+        let statements = parse(
+            r#"
+            {
+                class LocalClass {}
+            }
+            "#,
+        );
+        let resolver = Resolver::new();
+        let result = resolver.resolve(&statements);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_class_shadowing() {
+        let statements = parse(
+            r#"
+            class Foo {}
+            {
+                class Foo {}
+            }
+            "#,
+        );
+        let resolver = Resolver::new();
+        let result = resolver.resolve(&statements);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_duplicate_class_in_same_scope_error() {
+        let statements = parse(
+            r#"
+            {
+                class Foo {}
+                class Foo {}
+            }
+            "#,
+        );
+        let resolver = Resolver::new();
+        let result = resolver.resolve(&statements);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Already a variable"));
+    }
+
+    #[test]
+    fn test_class_used_after_declaration() {
+        let statements = parse(
+            r#"
+            class Robot {}
+            print Robot;
+            "#,
+        );
+        let resolver = Resolver::new();
+        let result = resolver.resolve(&statements);
+        assert!(result.is_ok());
     }
 }

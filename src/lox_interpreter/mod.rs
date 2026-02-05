@@ -20,7 +20,7 @@ use crate::environment::Environment;
 use crate::error::{Return, RuntimeError};
 use crate::stmt;
 use crate::token_types::TokenType;
-use crate::value::{LoxFunction, LoxValue, NativeFunction};
+use crate::value::{LoxClass, LoxFunction, LoxValue, NativeFunction};
 
 /// Interpreter evaluates Lox expressions and executes statements.
 pub struct Interpreter {
@@ -377,6 +377,17 @@ impl stmt::Visitor<Result<(), RuntimeError>> for Interpreter {
         };
 
         Err(RuntimeError::Return(Return { value }))
+    }
+
+    fn visit_class_stmt(&self, stmt: &stmt::ClassStmt) -> Result<(), RuntimeError> {
+        let class = LoxClass {
+            name: stmt.name.lexeme.clone(),
+        };
+        self.environment.borrow().borrow_mut().define(
+            stmt.name.lexeme.clone(),
+            LoxValue::Callable(Rc::new(class)),
+        );
+        Ok(())
     }
 }
 

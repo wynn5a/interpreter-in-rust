@@ -25,6 +25,7 @@ pub enum StmtEnum {
     While(WhileStmt),
     Function(FunctionStmt),
     Return(ReturnStmt),
+    Class(ClassStmt),
     None,
 }
 
@@ -40,6 +41,7 @@ impl StmtEnum {
             StmtEnum::While(stmt) => visitor.visit_while_stmt(stmt),
             StmtEnum::Function(stmt) => visitor.visit_function_stmt(stmt),
             StmtEnum::Return(stmt) => visitor.visit_return_stmt(stmt),
+            StmtEnum::Class(stmt) => visitor.visit_class_stmt(stmt),
             StmtEnum::None => panic!("Invalid statement type"),
         }
     }
@@ -105,6 +107,13 @@ pub(crate) struct ReturnStmt {
     pub(crate) value: Option<Box<ExprEnum>>,
 }
 
+// Class statement: declares a class
+#[derive(Clone)]
+pub(crate) struct ClassStmt {
+    pub(crate) name: Token,
+    // Methods will be added in future stages
+}
+
 // Visitor trait for statements
 // Unlike expressions which return values, statements return a generic type T
 // (typically Result<(), String> for execution)
@@ -117,6 +126,7 @@ pub trait Visitor<T> {
     fn visit_while_stmt(&self, stmt: &WhileStmt) -> T;
     fn visit_function_stmt(&self, stmt: &FunctionStmt) -> T;
     fn visit_return_stmt(&self, stmt: &ReturnStmt) -> T;
+    fn visit_class_stmt(&self, stmt: &ClassStmt) -> T;
 }
 
 #[cfg(test)]
@@ -166,6 +176,10 @@ mod tests {
 
         fn visit_return_stmt(&self, _stmt: &ReturnStmt) -> String {
             "return-stmt".to_string()
+        }
+
+        fn visit_class_stmt(&self, _stmt: &ClassStmt) -> String {
+            "class-stmt".to_string()
         }
     }
 
