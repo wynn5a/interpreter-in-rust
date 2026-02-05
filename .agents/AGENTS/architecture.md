@@ -24,6 +24,12 @@ The interpreter currently supports:
 - Statement execution (expression statements, print statements)
 - Variable declarations and assignments
 - Variable scoping with environments
+- Control flow (if/else, while, for loops)
+- User-defined functions with closures
+- Native functions (clock)
+- Return statements
+- Class declarations
+- Class instantiation (calling class as constructor)
 - Runtime error detection and reporting
 
 ## CodeCrafters Compatibility

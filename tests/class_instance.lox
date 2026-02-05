@@ -1,0 +1,15 @@
+// Test class instantiation
+class Spaceship {}
+var falcon = Spaceship();
+print falcon;
+
+// Test multiple instances
+class Robot {}
+var r1 = Robot();
+var r2 = Robot();
+print r1;
+print r2;
+
+// Test direct instantiation without variable
+class Wizard {}
+print Wizard();

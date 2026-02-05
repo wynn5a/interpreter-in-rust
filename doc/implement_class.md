@@ -171,7 +171,49 @@ Both classes successfully printed
 
 This is just the first step. Future stages will add:
 - Methods (Section 12.3)
-- Instance creation (Section 12.4)
+- ~~Instance creation (Section 12.4)~~ **Implemented** — see below
 - `this` keyword (Section 12.5)
 - Constructors/init (Section 12.6)
 - Inheritance (Chapter 13)
+
+## Instance Creation (Section 12.4)
+
+### Overview
+
+Calling a class like a function creates a new instance of that class. Instances display
+as `ClassName instance`.
+
+### Implementation
+
+**LoxInstance** (`src/value.rs`): A struct holding a reference to its class:
+```rust
+pub struct LoxInstance {
+    pub class: Rc<LoxClass>,
+}
+```
+
+**LoxValue::Instance**: New variant added to the value enum:
+```rust
+pub enum LoxValue {
+    // ...existing variants...
+    Instance(Rc<RefCell<LoxInstance>>),
+}
+```
+
+**LoxClass::call()**: Updated to create and return an instance:
+```rust
+fn call(&self, _interpreter: &Interpreter, _arguments: Vec<LoxValue>)
+    -> Result<LoxValue, RuntimeError> {
+    let instance = LoxInstance::new(Rc::new(self.clone()));
+    Ok(LoxValue::Instance(Rc::new(RefCell::new(instance))))
+}
+```
+
+### Test Case
+
+```lox
+class Spaceship {}
+var falcon = Spaceship();
+print falcon;
+// Output: Spaceship instance
+```

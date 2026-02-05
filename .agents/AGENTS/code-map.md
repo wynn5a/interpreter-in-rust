@@ -18,6 +18,8 @@ Reference table for major types and their locations in the codebase.
 | LoxCallable | trait | src/value.rs:22 | value | Callable objects trait |
 | NativeFunction | struct | src/value.rs:80 | value | Built-in functions |
 | LoxFunction | struct | src/value.rs:121 | value | User-defined functions |
+| LoxClass | struct | src/value.rs:171 | value | Class runtime representation |
+| LoxInstance | struct | src/value.rs:203 | value | Class instance runtime representation |
 | RuntimeError | enum | src/error.rs:14 | interpreter | Runtime error type |
 | Return | struct | src/error.rs:51 | error | Return exception type |
 

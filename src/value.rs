@@ -37,6 +37,7 @@ pub enum LoxValue {
     Boolean(bool),
     Nil,
     Callable(Rc<dyn LoxCallable>),
+    Instance(Rc<RefCell<LoxInstance>>),
 }
 
 impl PartialEq for LoxValue {
@@ -47,6 +48,7 @@ impl PartialEq for LoxValue {
             (LoxValue::Boolean(a), LoxValue::Boolean(b)) => a == b,
             (LoxValue::Nil, LoxValue::Nil) => true,
             (LoxValue::Callable(_), LoxValue::Callable(_)) => false, // Functions are not comparable for equality
+            (LoxValue::Instance(_), LoxValue::Instance(_)) => false, // Instances are not comparable for equality
             _ => false,
         }
     }
@@ -69,6 +71,7 @@ impl fmt::Display for LoxValue {
             LoxValue::Boolean(b) => write!(f, "{}", b),
             LoxValue::Nil => write!(f, "nil"),
             LoxValue::Callable(c) => write!(f, "{}", c),
+            LoxValue::Instance(i) => write!(f, "{}", i.borrow()),
         }
     }
 }
@@ -191,7 +194,35 @@ impl LoxCallable for LoxClass {
         _interpreter: &crate::lox_interpreter::Interpreter,
         _arguments: Vec<LoxValue>,
     ) -> Result<LoxValue, RuntimeError> {
-        // For now, classes are not instantiable - instances will be added later
-        Ok(LoxValue::Nil)
+        let instance = LoxInstance::new(Rc::new(self.clone()));
+        Ok(LoxValue::Instance(Rc::new(RefCell::new(instance))))
+    }
+}
+
+// =============================================================================
+// LOX INSTANCE
+// =============================================================================
+
+/// Represents an instance of a Lox class at runtime.
+#[derive(Clone)]
+pub struct LoxInstance {
+    pub class: Rc<LoxClass>,
+}
+
+impl LoxInstance {
+    pub fn new(class: Rc<LoxClass>) -> Self {
+        LoxInstance { class }
+    }
+}
+
+impl fmt::Debug for LoxInstance {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} instance", self.class.name)
+    }
+}
+
+impl fmt::Display for LoxInstance {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} instance", self.class.name)
     }
 }

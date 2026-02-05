@@ -4022,3 +4022,112 @@ fn test_class_in_local_scope() {
     let outside = interpreter.globals.borrow().get("outsideClass").unwrap();
     assert!(matches!(outside, LoxValue::Callable(_)));
 }
+
+// =============================================================================
+// CLASS INSTANCE TESTS
+// =============================================================================
+
+#[test]
+fn test_class_instantiation_basic() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    // Test basic class instantiation
+    let source = r#"
+        class Spaceship {}
+        var falcon = Spaceship();
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+
+    // falcon should be an instance of Spaceship
+    let falcon = interpreter.globals.borrow().get("falcon").unwrap();
+    assert!(matches!(falcon, LoxValue::Instance(_)));
+}
+
+#[test]
+fn test_class_instance_display() {
+    // Test that instances display as "ClassName instance"
+    use crate::value::{LoxClass, LoxInstance};
+    use std::rc::Rc;
+
+    let class = Rc::new(LoxClass {
+        name: "Spaceship".to_string(),
+    });
+    let instance = LoxInstance::new(class);
+    assert_eq!(format!("{}", instance), "Spaceship instance");
+}
+
+#[test]
+fn test_multiple_instances_same_class() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    // Test creating multiple instances of the same class
+    let source = r#"
+        class Robot {}
+        var r1 = Robot();
+        var r2 = Robot();
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+
+    // Both should be instances
+    let r1 = interpreter.globals.borrow().get("r1").unwrap();
+    let r2 = interpreter.globals.borrow().get("r2").unwrap();
+    assert!(matches!(r1, LoxValue::Instance(_)));
+    assert!(matches!(r2, LoxValue::Instance(_)));
+}
+
+#[test]
+fn test_direct_instantiation_in_print() {
+    use crate::lox_parser::LoxParser;
+    use crate::lox_tokenizer::LoxTokenizer;
+    use crate::resolver::Resolver;
+
+    // Test direct instantiation (Wizard() without storing in variable)
+    let source = r#"
+        class Wizard {}
+        Wizard();
+    "#;
+
+    let mut tokenizer = LoxTokenizer::default();
+    let tokens = tokenizer.tokenize(source);
+    let mut parser = LoxParser::new(tokens);
+    let statements = parser.parse();
+    assert!(!parser.has_error);
+
+    let resolver = Resolver::new();
+    resolver.resolve(&statements).expect("Resolver failed");
+
+    let mut interpreter = Interpreter::new();
+    interpreter.set_locals(resolver.into_locals());
+    let result = interpreter.interpret(&statements);
+    assert!(result.is_ok());
+}
